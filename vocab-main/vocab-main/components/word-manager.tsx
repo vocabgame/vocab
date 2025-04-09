@@ -234,7 +234,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       const data = await response.json()
 
       toast({
-        title: "ล้างคำศัพท์ทั้งหมดสำเร็จ",
+        title: "ล้างคำศัพท์ส้งหมดสำเร็จ",
         description: data.message,
       })
 
@@ -296,7 +296,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     if (!bulkData || !bulkLevel) {
       toast({
         title: "ข้อมูลไม่ครบถ้วน",
-        description: "กรอกข้อมูลคำศัพท์และระดับ",
+        description: "กรอกข้อมูลคำศัพท์และกระ",
         variant: "destructive",
       })
       return
@@ -319,10 +319,10 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
         .filter((pair) => pair.english && pair.thai)
 
       if (wordPairs.length === 0) {
-        throw new Error("ไม่พบคู่คำศัพท์ โปรดตรวจสอบข้อมูล")
+        throw new Error("ไม่พบคู่คำศัพท์ ต้อง โปรดตรวจสอบข้อมูล")
       }
 
-      // แบ่งคำศัพท์เป็นชุด ชุดละ 20 คำ เพื่อส่งข้อมูล
+      // แบ่งคำศัพท์เป็นๆ ละ 20 คำ เอ่อส่งละ
       const batchSize = 20
       const batches = []
       for (let i = 0; i < wordPairs.length; i += batchSize) {
@@ -333,7 +333,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       let addedCount = 0
       let updatedCount = 0
 
-      // ส่งข้อมูลทีละชุด
+      // ส่งข้อมูลละ
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i]
 
@@ -421,7 +421,7 @@ food,อาหาร`
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-lg border p-3">
-              <div className="text-sm font-medium text-muted-foreground">จำนวนคำศัพท์ทั้งหมด</div>
+              <div className="text-sm font-medium text-muted-foreground">จำนวนคำศัพท์ส้งหมด</div>
               <div className="mt-1 text-2xl font-bold">{wordCount}</div>
             </div>
             <div className="rounded-lg border p-3">
@@ -432,7 +432,7 @@ food,อาหาร`
               <div className="text-sm font-medium text-muted-foreground">การ</div>
               <div className="mt-1 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={addSampleWords} disabled={isLoading}>
-                  เพิ่มคำศัพท์ตัวอย่าง
+                  เบิกคำศัพท์อย่าง
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -445,7 +445,7 @@ food,อาหาร`
                     <AlertDialogHeader>
                       <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        การตั้งค่าความคืบหน้าจะลบการเรียนคำศัพท์ทั้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
+                        การตั้งค่าความคืบหน้าจะลบการเรียนคำศัพท์ส้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -488,33 +488,33 @@ food,อาหาร`
                 className={isMobile ? 'w-full' : ''}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                เพิ่มคำศัพท์ใหม่
+                เบิกคำศัพท์ใหม่
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
+                  <Button 
+                    variant="destructive" 
                     disabled={isLoading}
                     className={isMobile ? 'w-full' : ''}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    ล้างคำศัพท์ทั้งหมด
+                    ล้างคำศัพท์ส้งหมด
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      การล้างคำศัพท์ทั้งหมดจะลบคำศัพท์ทั้งหมดในฐานข้อมูล การกระทำไม่สามารถย้อนกลับได้
+                      การล้างคำศัพท์ส้งหมดจะลบคำศัพท์ส้งหมดในฐานข้อมูล การกระทำไม่สามารถย้อนกลับได้
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={clearAllWords}
+                    <AlertDialogAction 
+                      onClick={clearAllWords} 
                       className="bg-destructive text-destructive-foreground"
                     >
-                      ล้างคำศัพท์ทั้งหมด
+                      ล้างคำศัพท์ส้งหมด
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -527,7 +527,7 @@ food,อาหาร`
           <Card>
             <CardHeader>
               <CardTitle>รายการคำศัพท์</CardTitle>
-              <CardDescription>ค้นหาและจัดการคำศัพท์ในฐานข้อมูล</CardDescription>
+              <CardDescription>ค้นหาและคำศัพท์ในฐานข้อมูล</CardDescription>
             </CardHeader>
             <CardContent>
               <div className={`${isMobile ? 'flex flex-col' : 'flex flex-col md:flex-row'} gap-4 mb-4`}>
@@ -545,10 +545,10 @@ food,อาหาร`
                 <div className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-2`}>
                   <Select value={levelFilter} onValueChange={setLevelFilter}>
                     <SelectTrigger className={isMobile ? 'w-full' : 'w-[180px]'}>
-                      <SelectValue placeholder="กรองตามระดับ" />
+                      <SelectValue placeholder="กรองตาม" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">ทุกระดับ</SelectItem>
+                      <SelectItem value="all">คกระหาร</SelectItem>
                       <SelectItem value="a1">A1</SelectItem>
                       <SelectItem value="a2">A2</SelectItem>
                       <SelectItem value="b1">B1</SelectItem>
@@ -557,9 +557,9 @@ food,อาหาร`
                       <SelectItem value="c2">C2</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button
-                    onClick={loadWords}
-                    disabled={isLoading}
+                  <Button 
+                    onClick={loadWords} 
+                    disabled={isLoading} 
                     variant="outline"
                     className={isMobile ? 'w-full' : ''}
                   >
@@ -675,7 +675,7 @@ food,อาหาร`
                   <Label htmlFor="level">ระดับ CEFR</Label>
                   <Select value={formData.level} onValueChange={(value) => setFormData({ ...formData, level: value })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="เลือกระดับ CEFR" />
+                      <SelectValue placeholder="กรองตามระดับ CEFR" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="a1">A1</SelectItem>
@@ -756,7 +756,7 @@ car,รถยนต์"
                   <Label htmlFor="bulkLevel">ระดับ CEFR</Label>
                   <Select value={bulkLevel} onValueChange={setBulkLevel}>
                     <SelectTrigger>
-                      <SelectValue placeholder="เลือกระดับ CEFR" />
+                      <SelectValue placeholder="กรองตามระดับ CEFR" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="a1">A1</SelectItem>
