@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { getNextWord } from "@/lib/words"
+import { getNextWord, getNextWords } from "@/lib/words"
 import { getUserProgress } from "@/lib/user-progress"
 
 // เพิ่ม cache headers เพื่อให้การตอบสนองเร็วขึ้น
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       }
 
       const body = await request.json()
-      const { userId, currentWordId } = body
+      const { userId, currentWordId, prefetchCount = 1 } = body
 
       if (!userId || !currentWordId) {
         return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -37,8 +37,15 @@ export async function POST(request: Request) {
       const oldLevel = oldProgress.currentLevel
       const oldStage = oldProgress.currentStage || 1
 
-      // เรียกใช้ getNextWord พร้อมกับ signal เพื่อให้สามารถยกเลิกได้ถ้าใช้เวลานานเกินไป
-      const result = await getNextWord(userId, currentWordId)
+      // ถ้าต้องการโหลดคำศัพท์หลายคำ
+      let result;
+      if (prefetchCount > 1) {
+        // โหลดคำศัพท์หลายคำพร้อมกัน
+        result = await getNextWords(userId, currentWordId, prefetchCount);
+      } else {
+        // โหลดคำศัพท์เดียว
+        result = await getNextWord(userId, currentWordId);
+      }
 
       // ดึงข้อมูลความคืบหน้าหลังเรียกใช้ getNextWord
       const newProgress = await getUserProgress(userId)

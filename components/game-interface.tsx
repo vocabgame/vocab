@@ -210,7 +210,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     window.speechSynthesis.speak(utterance)
   }
 
-  // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล
+  // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
   const prefetchNextWord = async (currentWordId: string) => {
     try {
       // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
@@ -220,14 +220,18 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 วินาที
 
+      // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
       const response = await fetch("/api/words/next", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache"
         },
         body: JSON.stringify({
           userId,
           currentWordId,
+          prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
         }),
         signal, // ใช้ signal จาก AbortController
       })
@@ -240,6 +244,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       }
 
       const data = await response.json()
+
+      // เก็บข้อมูลคำศัพท์ที่โหลดล่วงหน้า
       setNextWordData(data)
       return data
     } catch (error) {
@@ -273,11 +279,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": "no-cache", // ไม่ใช้ข้อมูลจาก cache
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache"
           },
           body: JSON.stringify({
             userId,
             currentWordId,
+            prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
           }),
           signal, // ใช้ signal จาก AbortController
         })
@@ -293,13 +301,24 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       }
 
       // เซ็ตข้อมูลคำถัดไปไว้ล่วงหน้า
-      setNextWordData(null)
+      // ถ้ามีคำศัพท์ที่โหลดล่วงหน้ามาแล้ว ให้เก็บไว้
+      if (data.nextWords && data.nextWords.length > 0) {
+        // เก็บคำศัพท์แรกจาก nextWords ไว้ใช้ต่อไป
+        setNextWordData({
+          word: data.nextWords[0].word,
+          choices: data.nextWords[0].choices,
+          nextWords: data.nextWords.slice(1) // เก็บคำศัพท์ที่เหลือไว้
+        });
+      } else {
+        // ถ้าไม่มีคำศัพท์ที่โหลดล่วงหน้ามา ให้ล้างข้อมูลเดิม
+        setNextWordData(null);
 
-      // เริ่ม prefetch คำถัดไปทันทีหลังจากได้คำปัจจุบัน
-      if (data.word) {
-        setTimeout(() => {
-          prefetchNextWord(data.word._id);
-        }, 100); // รอ 100ms ก่อน prefetch เพื่อให้คำปัจจุบันโหลดเสร็จก่อน
+        // เริ่ม prefetch คำถัดไปทันทีหลังจากได้คำปัจจุบัน
+        if (data.word) {
+          setTimeout(() => {
+            prefetchNextWord(data.word._id);
+          }, 100); // รอ 100ms ก่อน prefetch เพื่อให้คำปัจจุบันโหลดเสร็จก่อน
+        }
       }
 
       // ตรวจสอบว่าคำถัดไปไม่

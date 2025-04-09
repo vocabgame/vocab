@@ -211,6 +211,80 @@ export async function getNextWord(userId: string, currentWordId: string) {
   }
 }
 
+// ดึงคำศัพท์หลายคำพร้อมกัน
+export async function getNextWords(userId: string, currentWordId: string, count: number = 3) {
+  try {
+    const client = await clientPromise
+    const db = client.db()
+
+    // ดึงข้อมูลความคืบหน้าของผู้ใช้
+    const progress = await getUserProgress(userId)
+
+    // เพิ่มคำปัจจุบันเข้าไปใน completedWords ชั่วคราว
+    const tempCompletedWords = [...progress.completedWords]
+    if (!tempCompletedWords.includes(currentWordId)) {
+      tempCompletedWords.push(currentWordId)
+    }
+
+    // สร้าง progress ชั่วคราว
+    const tempProgress = {
+      ...progress,
+      completedWords: tempCompletedWords,
+    }
+
+    // ดึงคำศัพท์หลายคำพร้อมกัน
+    const words = [];
+    let currentTempProgress = { ...tempProgress };
+    let currentTempCompletedWords = [...tempCompletedWords];
+
+    // ดึงคำศัพท์ทีละคำตามจำนวนที่ต้องการ
+    for (let i = 0; i < count; i++) {
+      // ดึงคำศัพท์ถัดไป
+      const wordResult = await getWordForUser(userId, currentTempProgress);
+
+      // ถ้าไม่มีคำศัพท์แล้ว ให้หยุด
+      if (!wordResult.word) break;
+
+      // เพิ่มคำศัพท์ที่ได้เข้าไปใน array
+      words.push(wordResult);
+
+      // เพิ่มคำศัพท์ที่ได้เข้าไปใน completedWords ชั่วคราว
+      if (wordResult.word && wordResult.word._id) {
+        const wordId = wordResult.word._id.toString();
+        if (!currentTempCompletedWords.includes(wordId)) {
+          currentTempCompletedWords.push(wordId);
+        }
+      }
+
+      // อัพเดต progress ชั่วคราวสำหรับการดึงคำถัดไป
+      currentTempProgress = {
+        ...currentTempProgress,
+        completedWords: currentTempCompletedWords,
+      };
+    }
+
+    // ดึงข้อมูลความคืบหน้าล่าสุด
+    const updatedProgress = await getUserProgress(userId);
+
+    // ตรวจสอบว่ามีการเปลี่ยนระดับหรือด่านหรือไม่
+    const levelComplete = updatedProgress.currentLevel !== progress.currentLevel;
+    const stageComplete = !levelComplete && updatedProgress.currentStage !== progress.currentStage;
+
+    // ส่งคำศัพท์แรกกลับไปพร้อมกับคำศัพท์ที่เหลือ
+    return {
+      word: words.length > 0 ? words[0].word : null,
+      choices: words.length > 0 ? words[0].choices : [],
+      nextWords: words.slice(1), // คำศัพท์ที่เหลือ
+      progress: updatedProgress,
+      levelComplete,
+      stageComplete,
+    };
+  } catch (error) {
+    console.error("Error getting next words:", error);
+    throw error;
+  }
+}
+
 export async function getWordsForStage(level: string, stage: number, completedWords: string[] = []) {
   const client = await clientPromise
   const db = client.db()
