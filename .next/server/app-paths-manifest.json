@@ -1,10 +1,6 @@
 {
-  "/api/words/next/route": "app/api/words/next/route.js",
-  "/api/progress/select-level/route": "app/api/progress/select-level/route.js",
-  "/api/progress/route": "app/api/progress/route.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
   "/(authenticated)/manage-words/page": "app/(authenticated)/manage-words/page.js",
-  "/(authenticated)/game/page": "app/(authenticated)/game/page.js",
+  "/(authenticated)/level-select/page": "app/(authenticated)/level-select/page.js",
   "/(authenticated)/progress/page": "app/(authenticated)/progress/page.js",
-  "/(authenticated)/level-select/page": "app/(authenticated)/level-select/page.js"
+  "/(authenticated)/game/page": "app/(authenticated)/game/page.js"
 }
