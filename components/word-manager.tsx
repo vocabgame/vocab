@@ -319,10 +319,10 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
         .filter((pair) => pair.english && pair.thai)
 
       if (wordPairs.length === 0) {
-        throw new Error("ไม่พบคู่คำศัพท์ ต้อง โปรดตรวจสอบข้อมูล")
+        throw new Error("ไม่พบคู่คำศัพท์ โปรดตรวจสอบข้อมูล")
       }
 
-      // แบ่งคำศัพท์เป็นๆ ละ 20 คำ เอ่อส่งละ
+      // แบ่งคำศัพท์เป็นชุด ชุดละ 20 คำ เพื่อส่งข้อมูล
       const batchSize = 20
       const batches = []
       for (let i = 0; i < wordPairs.length; i += batchSize) {
