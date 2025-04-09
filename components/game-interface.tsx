@@ -240,7 +240,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   }
 
   // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
-  const prefetchNextWord = async (currentWordId: string, batchSize = 10) => {
+  const prefetchNextWord = async (currentWordId: string, batchSize = 50) => {
     try {
       // ลองดึงข้อมูลจาก cache ก่อน
       const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
@@ -265,7 +265,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       const signal = controller.signal;
 
       // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // ลดเวลาลงเป็น 8 วินาทีเพื่อให้ทำงานได้บน Vercel
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพื่อให้มีเวลาโหลดคำศัพท์ 50 คำ
 
       // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
       console.log(`Sending request to fetch next words...`);
@@ -282,7 +282,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           body: JSON.stringify({
             userId,
             currentWordId,
-            prefetchCount: batchSize, // ใช้ขนาด batch ที่กำหนด
+            prefetchCount: 50, // โหลดคำศัพท์ 50 คำตามที่ต้องการ
           }),
           signal, // ใช้ signal จาก AbortController
         });
@@ -323,13 +323,33 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       }
 
       // ลองโหลดคำศัพท์น้อยลง
-      if (batchSize > 3) {
-        console.log(`Retrying with smaller batch size: ${Math.floor(batchSize / 2)}`);
-        return prefetchNextWord(currentWordId, Math.floor(batchSize / 2));
-      } else {
+      try {
+        console.log("Retrying with 10 words...");
+        const retryResponse = await fetch("/api/words/next", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            currentWordId,
+            prefetchCount: 10, // โหลดแค่ 10 คำเมื่อเกิดข้อผิดพลาด
+          }),
+        });
+
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          console.log(`Retry successful, fetched ${retryData.nextWords ? retryData.nextWords.length : 0} words`);
+          setNextWordData(retryData);
+          return retryData;
+        }
+      } catch (retryError) {
+        console.error("Error in retry attempt:", retryError);
+
+        // ลองอีกครั้งด้วยคำศัพท์เพียง 1 คำ
         try {
-          console.log("Retrying with minimum batch size...");
-          const retryResponse = await fetch("/api/words/next", {
+          console.log("Retrying with 1 word as last resort...");
+          const lastRetryResponse = await fetch("/api/words/next", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -341,14 +361,14 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             }),
           });
 
-          if (retryResponse.ok) {
-            const retryData = await retryResponse.json();
-            console.log(`Retry successful, fetched ${retryData.nextWords ? retryData.nextWords.length : 0} words`);
-            setNextWordData(retryData);
-            return retryData;
+          if (lastRetryResponse.ok) {
+            const lastRetryData = await lastRetryResponse.json();
+            console.log(`Last retry successful, fetched ${lastRetryData.nextWords ? lastRetryData.nextWords.length : 0} words`);
+            setNextWordData(lastRetryData);
+            return lastRetryData;
           }
-        } catch (retryError) {
-          console.error("Error in retry attempt:", retryError);
+        } catch (lastRetryError) {
+          console.error("Error in last retry attempt:", lastRetryError);
         }
       }
 
@@ -398,7 +418,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         const signal = controller.signal;
 
         // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // ลดเวลาลงเป็น 8 วินาทีเพื่อให้ทำงานได้บน Vercel
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพื่อให้มีเวลาโหลดคำศัพท์ 50 คำ
 
         try {
           const response = await fetch("/api/words/next", {
@@ -411,7 +431,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             body: JSON.stringify({
               userId,
               currentWordId,
-              prefetchCount: 10, // ลดจำนวนคำศัพท์ที่โหลดลงเพื่อให้เร็วขึ้น
+              prefetchCount: 50, // โหลดคำศัพท์ 50 คำตามที่ต้องการ
             }),
             signal, // ใช้ signal จาก AbortController
           });
@@ -437,7 +457,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           clearTimeout(timeoutId);
 
           // ลองโหลดคำศัพท์น้อยลง
-          console.log("Retrying with fewer words...");
+          console.log("Retrying with 10 words...");
           const retryResponse = await fetch("/api/words/next", {
             method: "POST",
             headers: {
@@ -446,15 +466,34 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             body: JSON.stringify({
               userId,
               currentWordId,
-              prefetchCount: 1, // โหลดแค่ 1 คำเพื่อให้เร็วที่สุด
+              prefetchCount: 10, // โหลดแค่ 10 คำเมื่อเกิดข้อผิดพลาด
             }),
           });
 
           if (retryResponse.ok) {
             data = await retryResponse.json();
-            console.log("Retry successful");
+            console.log("Retry with 10 words successful");
           } else {
-            throw new Error("Failed to get next word even with retry");
+            // ลองอีกครั้งด้วยคำศัพท์เพียง 1 คำ
+            console.log("Retrying with 1 word as last resort...");
+            const lastRetryResponse = await fetch("/api/words/next", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId,
+                currentWordId,
+                prefetchCount: 1, // โหลดแค่ 1 คำเพื่อให้เร็วที่สุด
+              }),
+            });
+
+            if (lastRetryResponse.ok) {
+              data = await lastRetryResponse.json();
+              console.log("Last retry with 1 word successful");
+            } else {
+              throw new Error("Failed to get next word even with retry");
+            }
           }
         }
       }
@@ -695,7 +734,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         try {
           const controller = new AbortController();
           const signal = controller.signal;
-          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 วินาที
+          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 วินาทีเพื่อให้มีเวลาอัพเดตความคืบหน้า
 
           const response = await fetch("/api/progress", {
             method: "POST",
