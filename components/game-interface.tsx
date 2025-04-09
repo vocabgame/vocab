@@ -84,32 +84,11 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   const { toast } = useToast()
   const router = useRouter()
 
-  // ตรวจสอบการสนับสนุนการออกเสียงเมื่อ component โหลด
+  // ล้าง timer เมื่อ component unmount
   useEffect(() => {
-    // ตรวจสอบว่า speechSynthesis พร้อมใช้งานหรือไม่
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      // เคลียร์เสียงที่ค้างอยู่ก่อน (สำคัญสำหรับมือถือ)
-      window.speechSynthesis.cancel()
-
-      // ทดสอบการออกเสียงโดยไม่มีเสียงจริง (เพื่อกระตุ้นให้เบราว์เซอร์เตรียมพร้อม)
-      const testUtterance = new SpeechSynthesisUtterance('')
-      testUtterance.volume = 0 // ตั้งค่าความดังเป็น 0 เพื่อไม่ให้มีเสียง
-      window.speechSynthesis.speak(testUtterance)
-
-      console.log('Speech synthesis initialized')
-    } else {
-      console.warn('Speech synthesis not supported in this browser')
-    }
-
-    // ล้าง timer เมื่อ component unmount
     return () => {
       if (autoAdvanceTimer) {
         clearTimeout(autoAdvanceTimer)
-      }
-
-      // เคลียร์เสียงที่ค้างอยู่เมื่อ component unmount
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel()
       }
     }
   }, [autoAdvanceTimer])
@@ -185,20 +164,49 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
 
   // ข้ามไปคำถัดไปในโหมดด่าน
   const handleSkipWord = useCallback(() => {
-    if (!isStageMode || stageWords.length === 0) return;
+    // ถ้ามีคำศัพท์ที่โหลดมาแล้วใน nextWordData ให้ใช้คำศัพท์นั้น
+    if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
+      // ใช้คำถัดไปจาก nextWords
+      setWord(nextWordData.nextWords[0].word);
+      setChoices(nextWordData.nextWords[0].choices);
 
-    // เพิ่ม index และเปลี่ยนไปคำถัดไป
-    const nextIndex = (currentWordIndex + 1) % stageWords.length;
-    setCurrentWordIndex(nextIndex);
+      // อัพเดต nextWordData ให้เก็บคำที่เหลือ
+      setNextWordData({
+        ...nextWordData,
+        word: nextWordData.nextWords[0].word,
+        choices: nextWordData.nextWords[0].choices,
+        nextWords: nextWordData.nextWords.slice(1)
+      });
 
-    // เปลี่ยนไปคำถัดไป
-    const nextWordData = stageWords[nextIndex];
-    setWord(nextWordData.word);
-    setChoices(nextWordData.choices);
-    setSelectedAnswer(null);
-    setIsCorrect(null);
-    setIsRevealed(false);
-  }, [isStageMode, stageWords, currentWordIndex]);
+      // รีเซ็ตสถานะ
+      setSelectedAnswer(null);
+      setIsCorrect(null);
+      setIsRevealed(false);
+
+      console.log("Using next word from prefetched data");
+      return;
+    }
+
+    // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
+    if (isStageMode && stageWords.length > 0) {
+      // เพิ่ม index และเปลี่ยนไปคำถัดไป
+      const nextIndex = (currentWordIndex + 1) % stageWords.length;
+      setCurrentWordIndex(nextIndex);
+
+      // เปลี่ยนไปคำถัดไป
+      const nextWord = stageWords[nextIndex];
+      setWord(nextWord.word);
+      setChoices(nextWord.choices);
+      setSelectedAnswer(null);
+      setIsCorrect(null);
+      setIsRevealed(false);
+
+      console.log(`Skipped to word ${nextIndex + 1}/${stageWords.length}`);
+      return;
+    }
+
+    console.log("No words available to skip to");
+  }, [isStageMode, stageWords, currentWordIndex, nextWordData]);
 
   // ผ่านคำนี้ไป (ไม่บันทึกว่าเรียนแล้ว)
   const handlePassWord = useCallback(() => {
@@ -206,119 +214,29 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     handleSkipWord();
   }, [handleSkipWord])
 
-  // ตรวจสอบว่าเบราว์เซอร์รองรับการออกเสียงหรือไม่
-  const isSpeechSupported = () => {
-    return typeof window !== 'undefined' && window.speechSynthesis !== undefined
-  }
-
-  // ตรวจสอบว่าอยู่บนมือถือหรือไม่
-  const isMobileDevice = () => {
-    return typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-  }
-
   const playPronunciation = () => {
     if (isSpeaking || !word || !word.english) return
 
-    // ตรวจสอบว่า speechSynthesis พร้อมใช้งานหรือไม่
-    if (!isSpeechSupported()) {
-      console.error("Speech synthesis not supported")
+    setIsSpeaking(true)
+    const utterance = new SpeechSynthesisUtterance(word.english)
+    utterance.lang = "en-US"
+    utterance.rate = 0.8 // ลดความเร็วลงเล็กน้อยเพื่อให้
+
+    utterance.onend = () => {
+      setIsSpeaking(false)
+    }
+
+    utterance.onerror = () => {
+      setIsSpeaking(false)
       toast({
-        title: "ไม่สามารถเล่นเสียงได้",
-        description: "อุปกรณ์ของคุณไม่รองรับการออกเสียง",
+        title: "ไม่สามารถเล่นได้",
+        description: "โปรดตรวจสอบว่าเบราว์เซอร์สามารถอ่านออกได้",
         variant: "destructive",
         duration: 3000,
       })
-      return
     }
 
-    // แสดงข้อความเตือนสำหรับมือถือ
-    const isOnMobile = isMobileDevice()
-    if (isOnMobile) {
-      console.log("Playing on mobile device")
-    }
-
-    setIsSpeaking(true)
-
-    // เคลียร์เสียงที่ค้างอยู่ก่อน (สำคัญสำหรับมือถือ)
-    window.speechSynthesis.cancel()
-
-    // สร้าง utterance ใหม่
-    const utterance = new SpeechSynthesisUtterance(word.english)
-
-    // ตั้งค่าที่เหมาะสมกับมือถือ
-    utterance.lang = "en-US"
-    utterance.rate = isOnMobile ? 0.7 : 0.8 // ลดความเร็วลงมากกว่าบนมือถือ
-    utterance.pitch = 1.0 // ตั้งค่าระดับเสียงปกติ
-    utterance.volume = 1.0 // ตั้งค่าความดังสูงสุด
-
-    // เพิ่มการจัดการเมื่อเล่นเสียงเสร็จ
-    utterance.onend = () => {
-      console.log("Speech synthesis finished")
-      setIsSpeaking(false)
-    }
-
-    // เพิ่มการจัดการเมื่อเกิดข้อผิดพลาด
-    utterance.onerror = (event) => {
-      console.error("Speech synthesis error:", event)
-      setIsSpeaking(false)
-
-      // แสดงข้อความเตือนสำหรับมือถือ
-      if (isOnMobile) {
-        toast({
-          title: "ไม่สามารถเล่นเสียงบนมือถือได้",
-          description: "การออกเสียงบนมือถืออาจไม่ทำงานในบางเบราว์เซอร์",
-          variant: "destructive",
-          duration: 3000,
-        })
-      } else {
-        toast({
-          title: "ไม่สามารถเล่นเสียงได้",
-          description: "โปรดตรวจสอบว่าอุปกรณ์ของคุณรองรับการออกเสียง",
-          variant: "destructive",
-          duration: 3000,
-        })
-      }
-    }
-
-    // ใช้ timeout เพื่อให้แน่ใจว่า speechSynthesis พร้อมใช้งาน
-    setTimeout(() => {
-      try {
-        // เล่นเสียง
-        window.speechSynthesis.speak(utterance)
-
-        // สำหรับมือถือ ให้ใช้ workaround เพื่อแก้ปัญหาการหยุดทำงานของ speechSynthesis
-        if (isOnMobile) {
-          // ใช้ interval เพื่อกระตุ้น speechSynthesis ให้ทำงานต่อเนื่อง
-          const intervalId = setInterval(() => {
-            if (!window.speechSynthesis.speaking) {
-              clearInterval(intervalId)
-              setIsSpeaking(false)
-              return
-            }
-            // การหยุดชั่วคราวและเริ่มใหม่จะช่วยให้ speechSynthesis ทำงานต่อเนื่องบนมือถือ
-            window.speechSynthesis.pause()
-            window.speechSynthesis.resume()
-          }, 300)
-        }
-
-        // ตั้งเวลาเพื่อรีเซ็ตสถานะหากไม่มีการเรียก onend หรือ onerror
-        setTimeout(() => {
-          if (isSpeaking) {
-            console.log("Resetting speaking state after timeout")
-            setIsSpeaking(false)
-          }
-        }, isOnMobile ? 10000 : 5000) // รอนานขึ้นสำหรับมือถือ
-      } catch (error) {
-        console.error("Error speaking:", error)
-        setIsSpeaking(false)
-        toast({
-          title: "ไม่สามารถเล่นเสียงได้",
-          description: "เกิดข้อผิดพลาดขณะพยายามเล่นเสียง",
-          variant: "destructive",
-          duration: 3000,
-        })
-      }
-    }, isOnMobile ? 200 : 100) // รอนานขึ้นสำหรับมือถือ
+    window.speechSynthesis.speak(utterance)
   }
 
   // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
@@ -329,7 +247,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       const signal = controller.signal;
 
       // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 วินาที
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 วินาที เพิ่มเวลาเพราะต้องโหลดคำศัพท์มากขึ้น
 
       // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
       const response = await fetch("/api/words/next", {
@@ -342,7 +260,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         body: JSON.stringify({
           userId,
           currentWordId,
-          prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
+          prefetchCount: 100, // โหลดคำศัพท์ทั้งหมดในด่าน (100 คำ)
         }),
         signal, // ใช้ signal จาก AbortController
       })
@@ -563,56 +481,68 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     try {
       setIsLoading(true)
 
-      // ถ้ามีข้อมูลคำถัดไปแล้ว ให้เปลี่ยนไปคำถัดไปทันที
-      if (nextWordData) {
-        // ทำการอัพเดตความคืบหน้าแบบ non-blocking
-        fetch("/api/progress", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId,
-            wordId: word._id,
-            correct: true,
-          }),
-        }).then(response => {
-          if (response.ok) {
-            return response.json();
-          }
-        }).then(data => {
-          if (data) {
-            // อัพเดตความคืบหน้าในส่วนของ client-side
-            setCurrentProgress(data.progress);
+      // ทำการอัพเดตความคืบหน้าแบบ non-blocking
+      fetch("/api/progress", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          wordId: word._id,
+          correct: true,
+        }),
+      }).then(response => {
+        if (response.ok) {
+          return response.json();
+        }
+      }).then(data => {
+        if (data) {
+          // อัพเดตความคืบหน้าในส่วนของ client-side
+          setCurrentProgress(data.progress);
 
-            // อัพเดตสถิติแบบ optimistic update
-            if (currentStats) {
-              const updatedStats = { ...currentStats };
-              updatedStats.completedWords += 1;
+          // อัพเดตสถิติแบบ optimistic update
+          if (currentStats) {
+            const updatedStats = { ...currentStats };
+            updatedStats.completedWords += 1;
 
-              const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
-              if (levelIndex !== -1) {
-                updatedStats.levels[levelIndex].completed += 1;
+            const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
+            if (levelIndex !== -1) {
+              updatedStats.levels[levelIndex].completed += 1;
 
-                const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-                  (s) => s.stage === currentProgress.currentStage,
-                );
-                if (stageIndex !== -1) {
-                  updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
-                }
+              const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
+                (s) => s.stage === currentProgress.currentStage,
+              );
+              if (stageIndex !== -1) {
+                updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
               }
-
-              setCurrentStats(updatedStats);
             }
-          }
-        }).catch(error => {
-          console.error("Background progress update error:", error);
-        });
 
+            setCurrentStats(updatedStats);
+          }
+        }
+      }).catch(error => {
+        console.error("Background progress update error:", error);
+      });
+
+      // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
+      if (isStageMode && stageWords.length > 0) {
+        console.log("Using words from stage mode");
+        // เปลี่ยนไปคำถัดไปโดยใช้ handleSkipWord
+        handleSkipWord();
+        setIsLoading(false);
+        return;
+      }
+      // ถ้ามีข้อมูลคำถัดไปแล้ว ให้เปลี่ยนไปคำถัดไปทันที
+      else if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
+        console.log("Using prefetched next word");
         // เปลี่ยนไปคำถัดไปทันที
-        handleNext();
+        handleSkipWord();
+        setIsLoading(false);
+        return;
       } else {
         // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ prefetch ก่อน
+        console.log("No prefetched words, fetching new word");
         prefetchNextWord(word._id);
 
         // อัพเดตความคืบหน้าแบบ blocking เพื่อให้แน่ใจว่าข้อมูลถูกบันทึก
@@ -718,7 +648,19 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       setAutoAdvanceTimer(null)
     }
 
-    // เรียกใช้ fetchNextWord โดยตรงเพื่อโหลดคำถัดไป
+    // ถ้ามีคำศัพท์ที่โหลดมาแล้ว ให้ใช้ handleSkipWord แทน
+    if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
+      handleSkipWord();
+      return;
+    }
+
+    // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
+    if (isStageMode && stageWords.length > 0) {
+      handleSkipWord();
+      return;
+    }
+
+    // ถ้าไม่มีคำศัพท์ที่โหลดมาแล้ว ให้เรียกใช้ fetchNextWord โดยตรง
     await fetchNextWord(word._id)
   }
 
@@ -731,7 +673,19 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       setAutoAdvanceTimer(null)
     }
 
-    // เรียกใช้ fetchNextWord โดยตรงเพื่อโหลดคำถัดไป
+    // ถ้ามีคำศัพท์ที่โหลดมาแล้ว ให้ใช้ handleSkipWord แทน
+    if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
+      handleSkipWord();
+      return;
+    }
+
+    // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
+    if (isStageMode && stageWords.length > 0) {
+      handleSkipWord();
+      return;
+    }
+
+    // ถ้าไม่มีคำศัพท์ที่โหลดมาแล้ว ให้เรียกใช้ fetchNextWord โดยตรง
     await fetchNextWord(word._id)
   }
 
