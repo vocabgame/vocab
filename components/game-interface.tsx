@@ -342,7 +342,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         body: JSON.stringify({
           userId,
           currentWordId,
-          prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
+          prefetchCount: 10, // โหลดคำศัพท์ล่วงหน้า 10 คำ
         }),
         signal, // ใช้ signal จาก AbortController
       })
