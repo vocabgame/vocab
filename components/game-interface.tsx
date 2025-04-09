@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings, FastForward } from "lucide-react"
+import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -84,11 +84,32 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   const { toast } = useToast()
   const router = useRouter()
 
-  // ล้าง timer เมื่อ component unmount
+  // ตรวจสอบการสนับสนุนการออกเสียงเมื่อ component โหลด
   useEffect(() => {
+    // ตรวจสอบว่า speechSynthesis พร้อมใช้งานหรือไม่
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      // เคลียร์เสียงที่ค้างอยู่ก่อน (สำคัญสำหรับมือถือ)
+      window.speechSynthesis.cancel()
+
+      // ทดสอบการออกเสียงโดยไม่มีเสียงจริง (เพื่อกระตุ้นให้เบราว์เซอร์เตรียมพร้อม)
+      const testUtterance = new SpeechSynthesisUtterance('')
+      testUtterance.volume = 0 // ตั้งค่าความดังเป็น 0 เพื่อไม่ให้มีเสียง
+      window.speechSynthesis.speak(testUtterance)
+
+      console.log('Speech synthesis initialized')
+    } else {
+      console.warn('Speech synthesis not supported in this browser')
+    }
+
+    // ล้าง timer เมื่อ component unmount
     return () => {
       if (autoAdvanceTimer) {
         clearTimeout(autoAdvanceTimer)
+      }
+
+      // เคลียร์เสียงที่ค้างอยู่เมื่อ component unmount
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
       }
     }
   }, [autoAdvanceTimer])
@@ -185,29 +206,119 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     handleSkipWord();
   }, [handleSkipWord])
 
+  // ตรวจสอบว่าเบราว์เซอร์รองรับการออกเสียงหรือไม่
+  const isSpeechSupported = () => {
+    return typeof window !== 'undefined' && window.speechSynthesis !== undefined
+  }
+
+  // ตรวจสอบว่าอยู่บนมือถือหรือไม่
+  const isMobileDevice = () => {
+    return typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  }
+
   const playPronunciation = () => {
     if (isSpeaking || !word || !word.english) return
 
-    setIsSpeaking(true)
-    const utterance = new SpeechSynthesisUtterance(word.english)
-    utterance.lang = "en-US"
-    utterance.rate = 0.8 // ลดความเร็วลงเล็กน้อยเพื่อให้
-
-    utterance.onend = () => {
-      setIsSpeaking(false)
-    }
-
-    utterance.onerror = () => {
-      setIsSpeaking(false)
+    // ตรวจสอบว่า speechSynthesis พร้อมใช้งานหรือไม่
+    if (!isSpeechSupported()) {
+      console.error("Speech synthesis not supported")
       toast({
-        title: "ไม่สามารถเล่นได้",
-        description: "โปรดตรวจสอบว่าเบราว์เซอร์สามารถอ่านออกได้",
+        title: "ไม่สามารถเล่นเสียงได้",
+        description: "อุปกรณ์ของคุณไม่รองรับการออกเสียง",
         variant: "destructive",
         duration: 3000,
       })
+      return
     }
 
-    window.speechSynthesis.speak(utterance)
+    // แสดงข้อความเตือนสำหรับมือถือ
+    const isOnMobile = isMobileDevice()
+    if (isOnMobile) {
+      console.log("Playing on mobile device")
+    }
+
+    setIsSpeaking(true)
+
+    // เคลียร์เสียงที่ค้างอยู่ก่อน (สำคัญสำหรับมือถือ)
+    window.speechSynthesis.cancel()
+
+    // สร้าง utterance ใหม่
+    const utterance = new SpeechSynthesisUtterance(word.english)
+
+    // ตั้งค่าที่เหมาะสมกับมือถือ
+    utterance.lang = "en-US"
+    utterance.rate = isOnMobile ? 0.7 : 0.8 // ลดความเร็วลงมากกว่าบนมือถือ
+    utterance.pitch = 1.0 // ตั้งค่าระดับเสียงปกติ
+    utterance.volume = 1.0 // ตั้งค่าความดังสูงสุด
+
+    // เพิ่มการจัดการเมื่อเล่นเสียงเสร็จ
+    utterance.onend = () => {
+      console.log("Speech synthesis finished")
+      setIsSpeaking(false)
+    }
+
+    // เพิ่มการจัดการเมื่อเกิดข้อผิดพลาด
+    utterance.onerror = (event) => {
+      console.error("Speech synthesis error:", event)
+      setIsSpeaking(false)
+
+      // แสดงข้อความเตือนสำหรับมือถือ
+      if (isOnMobile) {
+        toast({
+          title: "ไม่สามารถเล่นเสียงบนมือถือได้",
+          description: "การออกเสียงบนมือถืออาจไม่ทำงานในบางเบราว์เซอร์",
+          variant: "destructive",
+          duration: 3000,
+        })
+      } else {
+        toast({
+          title: "ไม่สามารถเล่นเสียงได้",
+          description: "โปรดตรวจสอบว่าอุปกรณ์ของคุณรองรับการออกเสียง",
+          variant: "destructive",
+          duration: 3000,
+        })
+      }
+    }
+
+    // ใช้ timeout เพื่อให้แน่ใจว่า speechSynthesis พร้อมใช้งาน
+    setTimeout(() => {
+      try {
+        // เล่นเสียง
+        window.speechSynthesis.speak(utterance)
+
+        // สำหรับมือถือ ให้ใช้ workaround เพื่อแก้ปัญหาการหยุดทำงานของ speechSynthesis
+        if (isOnMobile) {
+          // ใช้ interval เพื่อกระตุ้น speechSynthesis ให้ทำงานต่อเนื่อง
+          const intervalId = setInterval(() => {
+            if (!window.speechSynthesis.speaking) {
+              clearInterval(intervalId)
+              setIsSpeaking(false)
+              return
+            }
+            // การหยุดชั่วคราวและเริ่มใหม่จะช่วยให้ speechSynthesis ทำงานต่อเนื่องบนมือถือ
+            window.speechSynthesis.pause()
+            window.speechSynthesis.resume()
+          }, 300)
+        }
+
+        // ตั้งเวลาเพื่อรีเซ็ตสถานะหากไม่มีการเรียก onend หรือ onerror
+        setTimeout(() => {
+          if (isSpeaking) {
+            console.log("Resetting speaking state after timeout")
+            setIsSpeaking(false)
+          }
+        }, isOnMobile ? 10000 : 5000) // รอนานขึ้นสำหรับมือถือ
+      } catch (error) {
+        console.error("Error speaking:", error)
+        setIsSpeaking(false)
+        toast({
+          title: "ไม่สามารถเล่นเสียงได้",
+          description: "เกิดข้อผิดพลาดขณะพยายามเล่นเสียง",
+          variant: "destructive",
+          duration: 3000,
+        })
+      }
+    }, isOnMobile ? 200 : 100) // รอนานขึ้นสำหรับมือถือ
   }
 
   // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
