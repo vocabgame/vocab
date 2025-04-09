@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
@@ -8,11 +7,15 @@ import { DebugLoginButton } from "@/components/debug-login-button"
 import Link from "next/link"
 
 export default async function Home() {
+  // ตรวจสอบเซสชันว่ามีการล็อกอินแล้วหรือไม่
   const session = await getServerSession(authOptions)
 
   // ยกเลิกการ redirect อัตโนมัติเพื่อป้องกันการวนลูป
   // แทนที่จะ redirect ให้แสดงปุ่มเข้าสู่เกมให้ผู้ใช้คลิกเอง
   const isLoggedIn = !!session
+
+  // บันทึกข้อมูลเซสชัน (debug)
+  console.log("Server Home page: Session exists =", isLoggedIn, "userId =", session?.user?.id || "none")
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -36,6 +39,20 @@ export default async function Home() {
         </div>
       </header>
       <main className="flex-1">
+        {isLoggedIn && (
+          <div className="w-full py-6 bg-yellow-100">
+            <div className="container px-4 text-center">
+              <h2 className="text-xl font-bold mb-2">ยินดีต้อนรับกลับ {session.user.name}</h2>
+              <p className="mb-4">คุณได้ล็อกอินเข้าสู่ระบบแล้ว สามารถเริ่มเล่นเกมได้เลย</p>
+              <Link href="/game">
+                <Button size="lg" className="bg-green-600 hover:bg-green-700">
+                  เริ่มเล่นเกม
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
         <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48">
           <div className="container px-4 md:px-6">
             <div className="flex flex-col items-center space-y-4 text-center">

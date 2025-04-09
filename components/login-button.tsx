@@ -3,29 +3,16 @@
 import { Button } from "@/components/ui/button"
 import { LogIn } from "lucide-react"
 import { useState } from "react"
-import { useToast } from "@/hooks/use-toast"
 
+// กำหนดให้ใช้วิธีที่เรียบง่ายที่สุดในการล็อกอิน
 export function LoginButton() {
   const [isLoading, setIsLoading] = useState(false)
-  const { toast } = useToast()
 
-  // เปลี่ยนวิธีการล็อกอินให้ใช้วิธีที่ตรงไปตรงมามากขึ้น
+  // ใช้การนำทางโดยตรงไปยังเส้นทางการล็อกอินของ Google
   const handleLogin = () => {
-    try {
-      setIsLoading(true)
-
-      // ใช้วิธีการล็อกอินโดยตรงแทนการใช้ signIn จาก nextauth/react
-      // เพื่อหลีกเลี่ยงปัญหาการจัดการ session ใน client side
-      window.location.href = "/api/auth/signin/google"
-    } catch (error) {
-      console.error("Login error:", error)
-      toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถเข้าสู่ระบบได้ โปรดลองอีกครั้ง",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-    }
+    setIsLoading(true)
+    // นำทางไปที่ URL การล็อกอินโดยตรง
+    window.location.href = "/api/auth/signin/google"
   }
 
   return (

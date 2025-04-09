@@ -11,7 +11,17 @@ export default async function AuthenticatedLayout({
 }) {
   const session = await getServerSession(authOptions)
 
-  if (!session) {
+  // ตรวจสอบเซสชันด้วย try-catch เพื่อป้องกันการผิดพลาดที่อาจเกิด
+  try {
+    // บันทึกค่า session เพื่อการแก้ไขปัญหา
+    console.log('Server AuthenticatedLayout: session exists =', !!session, 'userId =', session?.user?.id || 'none')
+
+    if (!session?.user?.id) {
+      console.log('Server AuthenticatedLayout: redirect to homepage due to no user id')
+      redirect("/")
+    }
+  } catch (error) {
+    console.error('Server AuthenticatedLayout: Error checking session:', error)
     redirect("/")
   }
 
