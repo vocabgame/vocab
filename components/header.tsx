@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { BookOpen, BarChart3, LogOut, User, Database, Layers, Menu } from "lucide-react"
-import { useState } from "react"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 interface HeaderProps {
   user: {
@@ -19,15 +20,66 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
   const pathname = usePathname()
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const isMobile = useIsMobile()
 
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen)
-  }
+  const navigationItems = [
+    { href: "/game", label: "เล่นเกม", icon: null },
+    { href: "/level-select", label: "กระ", icon: <Layers className="h-4 w-4" /> },
+    { href: "/progress", label: "ความคืบหน้า", icon: <BarChart3 className="h-4 w-4" /> },
+    { href: "/manage-words", label: "คำศัพท์", icon: <Database className="h-4 w-4" /> },
+  ]
+
+  const NavigationLinks = () => (
+    <>
+      {navigationItems.map((item) => (
+        <Link key={item.href} href={item.href}>
+          <Button 
+            variant={pathname === item.href ? "default" : "ghost"}
+            className="w-full justify-start"
+          >
+            {item.icon && <span className="mr-2">{item.icon}</span>}
+            {item.label}
+          </Button>
+        </Link>
+      ))}
+    </>
+  )
+
+  const UserButton = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" className="rounded-full">
+          {user?.image ? (
+            <img
+              src={user.image || "/placeholder.svg?height=32&width=32"}
+              alt={user.name || "User"}
+              className="h-8 w-8 rounded-full"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.src = "/placeholder.svg?height=32&width=32"
+              }}
+            />
+          ) : (
+            <User className="h-5 w-5" />
+          )}
+          <span className="sr-only">้ใช้</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem disabled>
+          <span>{user?.name || user?.email}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>ออกจากระบบ</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
-    <header className="sticky top-0 z-40 bg-black text-white border-b">
-      <div className="container flex items-center justify-between py-4">
+    <header className="sticky top-0 z-40 border-b bg-background">
+      <div className="container flex h-16 items-center justify-between py-4">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
             <BookOpen className="h-6 w-6" />
@@ -35,148 +87,37 @@ export function Header({ user }: HeaderProps) {
           </Link>
         </div>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant={pathname === "/game" ? "default" : "ghost"} 
-                className="rounded-lg py-2 px-4 text-base hover:bg-white hover:text-black transition-all">
-                เล่นเกม
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-black text-white shadow-md rounded-lg">
-              <DropdownMenuItem>
-                <Link href="/game">เล่นเกม</Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant={pathname === "/level-select" ? "default" : "ghost"} 
-                className="rounded-lg py-2 px-4 text-base hover:bg-white hover:text-black transition-all">
-                <Layers className="mr-2 h-4 w-4" />
-                เลือกระดับ
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-black text-white shadow-md rounded-lg">
-              <DropdownMenuItem>
-                <Link href="/level-select">เลือกระดับ</Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant={pathname === "/progress" ? "default" : "ghost"} 
-                className="rounded-lg py-2 px-4 text-base hover:bg-white hover:text-black transition-all">
-                <BarChart3 className="mr-2 h-4 w-4" />
-                ความคืบหน้า
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-black text-white shadow-md rounded-lg">
-              <DropdownMenuItem>
-                <Link href="/progress">ความคืบหน้า</Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant={pathname === "/manage-words" ? "default" : "ghost"} 
-                className="rounded-lg py-2 px-4 text-base hover:bg-white hover:text-black transition-all">
-                <Database className="mr-2 h-4 w-4" />
-                จัดการคำศัพท์
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-black text-white shadow-md rounded-lg">
-              <DropdownMenuItem>
-                <Link href="/manage-words">จัดการคำศัพท์</Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Profile Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-full border-white p-1 hover:bg-white hover:text-black transition-all">
-                {user?.image ? (
-                  <img
-                    src={user.image || "/placeholder.svg?height=32&width=32"}
-                    alt={user.name || "User"}
-                    className="h-8 w-8 rounded-full"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.src = "/placeholder.svg?height=32&width=32"
-                    }}
-                  />
-                ) : (
-                  <User className="h-5 w-5" />
-                )}
-                <span className="sr-only">เมนูผู้ใช้</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-black text-white shadow-md rounded-lg">
-              <DropdownMenuItem disabled>
-                <span>{user?.name || user?.email}</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>ออกจากระบบ</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </nav>
-
-        {/* Mobile Navigation */}
-        <nav className="lg:hidden flex items-center gap-4">
-          <Button variant="outline" onClick={toggleMenu} className="rounded-full p-2 border-white hover:bg-white hover:text-black transition-all">
-            <Menu className="h-6 w-6" />
-          </Button>
-
-          {/* Dropdown Menu for Mobile */}
-          {isMenuOpen && (
-            <div className="absolute top-16 right-4 bg-black text-white shadow-md rounded-lg p-4 w-48">
-              <Link href="/game" className="block py-2 text-base hover:bg-white hover:text-black transition-all rounded">เล่นเกม</Link>
-              <Link href="/level-select" className="block py-2 text-base hover:bg-white hover:text-black transition-all rounded">เลือกระดับ</Link>
-              <Link href="/progress" className="block py-2 text-base hover:bg-white hover:text-black transition-all rounded">ความคืบหน้า</Link>
-              <Link href="/manage-words" className="block py-2 text-base hover:bg-white hover:text-black transition-all rounded">จัดการคำศัพท์</Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="rounded-full w-full border-white">
-                    {user?.image ? (
-                      <img
-                        src={user.image || "/placeholder.svg?height=32&width=32"}
-                        alt={user.name || "User"}
-                        className="h-8 w-8 rounded-full"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          e.currentTarget.src = "/placeholder.svg?height=32&width=32"
-                        }}
-                      />
-                    ) : (
-                      <User className="h-5 w-5" />
-                    )}
+        <nav className="flex items-center gap-4">
+          {isMobile ? (
+            <div className="flex items-center gap-2">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <Menu className="h-5 w-5" />
+                    <span className="sr-only">เมนู</span>
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-black text-white shadow-md rounded-lg">
-                  <DropdownMenuItem disabled>
-                    <span>{user?.name || user?.email}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>ออกจากระบบ</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[240px] sm:w-[300px]">
+                  <nav className="flex flex-col gap-2 mt-6">
+                    <NavigationLinks />
+                  </nav>
+                </SheetContent>
+              </Sheet>
+              <UserButton />
             </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <NavigationLinks />
+              </div>
+              <UserButton />
+            </>
           )}
         </nav>
       </div>
     </header>
   )
 }
+
+
+

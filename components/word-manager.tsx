@@ -25,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from "@/components/ui/progress"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 interface WordManagerProps {
   wordCount: number
@@ -32,6 +33,7 @@ interface WordManagerProps {
 }
 
 export function WordManager({ wordCount, recentWords }: WordManagerProps) {
+  const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState("view")
   const [isLoading, setIsLoading] = useState(false)
   const [words, setWords] = useState<any[]>(recentWords)
@@ -49,7 +51,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
   const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
 
-  // ฟังก์ชันสำหรับโหลดคำศัพท์
+  // โหลดคำศัพท์
   const loadWords = async () => {
     try {
       setIsLoading(true)
@@ -71,7 +73,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     } catch (error) {
       console.error("Error loading words:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
+        title: "ข้อผิดพลาด",
         description: "ไม่สามารถโหลดคำศัพท์ได้",
         variant: "destructive",
       })
@@ -80,14 +82,14 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับเพิ่มหรืออัปเดตคำศัพท์
+  // บันทึกคำศัพท์
   const saveWord = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.english || !formData.thai || !formData.level) {
       toast({
         title: "ข้อมูลไม่ครบถ้วน",
-        description: "กรุณากรอกข้อมูลให้ครบทุกช่อง",
+        description: "กรอกข้อมูลให้ครบช่อง",
         variant: "destructive",
       })
       return
@@ -96,7 +98,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     try {
       setIsLoading(true)
 
-      // ถ้ามี _id แสดงว่าเป็นการอัปเดต
+      // ถ้า _id แสดงว่าเป็นการอัปเดต
       const isUpdate = !!formData._id
 
       const url = isUpdate ? `/api/words/${formData._id}` : "/api/words"
@@ -122,11 +124,11 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       const data = await response.json()
 
       toast({
-        title: isUpdate ? "อัปเดตคำศัพท์สำเร็จ" : "เพิ่มคำศัพท์สำเร็จ",
-        description: `คำศัพท์ "${data.english}" ${isUpdate ? "ถูกอัปเดต" : "ถูกเพิ่ม"}เรียบร้อยแล้ว`,
+        title: isUpdate ? "อัปเดตคำศัพท์สำเร็จ" : "บันทึกคำศัพท์สำเร็จ",
+        description: `คำศัพท์ "${data.english}" ${isUpdate ? "อัปเดต" : "บันทึก"} แล้ว`,
       })
 
-      // รีเซ็ตฟอร์ม
+      // ตั้งค่าฟอร์ม
       setFormData({
         _id: "",
         english: "",
@@ -137,12 +139,12 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       // โหลดคำศัพท์ใหม่
       loadWords()
 
-      // กลับไปที่แท็บดูคำศัพท์
+      // ไปแท็บคำศัพท์
       setActiveTab("view")
     } catch (error) {
       console.error("Error saving word:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
+        title: "ข้อผิดพลาด",
         description: error instanceof Error ? error.message : "ไม่สามารถบันทึกคำศัพท์ได้",
         variant: "destructive",
       })
@@ -151,9 +153,9 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับลบคำศัพท์
+  // ลบคำศัพท์
   const deleteWord = async (id: string) => {
-    if (!confirm("คุณแน่ใจหรือไม่ที่จะลบคำศัพท์นี้?")) {
+    if (!confirm("แน่ใจไม่จะลบคำศัพท์?")) {
       return
     }
 
@@ -169,7 +171,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
 
       toast({
         title: "ลบคำศัพท์สำเร็จ",
-        description: "ลบคำศัพท์เรียบร้อยแล้ว",
+        description: "ลบคำศัพท์แล้ว",
       })
 
       // อัปเดตรายการคำศัพท์
@@ -177,7 +179,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     } catch (error) {
       console.error("Error deleting word:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
+        title: "ข้อผิดพลาด",
         description: "ไม่สามารถลบคำศัพท์ได้",
         variant: "destructive",
       })
@@ -186,7 +188,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับเพิ่มคำศัพท์ตัวอย่าง
+  // บันทึกคำศัพท์อย่าง
   const addSampleWords = async () => {
     try {
       setIsLoading(true)
@@ -199,7 +201,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       const data = await response.json()
 
       toast({
-        title: "เพิ่มคำศัพท์ตัวอย่างสำเร็จ",
+        title: "บันทึกคำศัพท์อย่างสำเร็จ",
         description: data.message,
       })
 
@@ -208,8 +210,8 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     } catch (error) {
       console.error("Error adding sample words:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถเพิ่มคำศัพท์ตัวอย่างได้",
+        title: "ข้อผิดพลาด",
+        description: "ไม่สามารถบันทึกคำศัพท์อย่างได้",
         variant: "destructive",
       })
     } finally {
@@ -217,7 +219,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับล้างคำศัพท์ทั้งหมด
+  // ล้างคำศัพท์ส้งหมด
   const clearAllWords = async () => {
     try {
       setIsLoading(true)
@@ -232,7 +234,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       const data = await response.json()
 
       toast({
-        title: "ล้างคำศัพท์ทั้งหมดสำเร็จ",
+        title: "ล้างคำศัพท์ส้งหมดสำเร็จ",
         description: data.message,
       })
 
@@ -241,8 +243,8 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     } catch (error) {
       console.error("Error clearing all words:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถล้างคำศัพท์ทั้งหมดได้",
+        title: "ข้อผิดพลาด",
+        description: "ไม่สามารถล้างคำศัพท์ส้งหมดได้",
         variant: "destructive",
       })
     } finally {
@@ -250,7 +252,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับรีเซตความคืบหน้า
+  // ตั้งค่าความคืบหน้า
   const resetProgress = async () => {
     try {
       setIsLoading(true)
@@ -265,14 +267,14 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       const data = await response.json()
 
       toast({
-        title: "รีเซตความคืบหน้าสำเร็จ",
+        title: "ตั้งค่าความคืบหน้าสำเร็จ",
         description: data.message,
       })
     } catch (error) {
       console.error("Error resetting progress:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถรีเซตความคืบหน้าได้",
+        title: "ข้อผิดพลาด",
+        description: "ไม่สามารถตั้งค่าความคืบหน้าได้",
         variant: "destructive",
       })
     } finally {
@@ -280,21 +282,21 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับเล่นเสียงคำศัพท์
+  // ฟังก์ชันเล่นคำศัพท์
   const playPronunciation = (word: string) => {
     const utterance = new SpeechSynthesisUtterance(word)
     utterance.lang = "en-US"
     window.speechSynthesis.speak(utterance)
   }
 
-  // ฟังก์ชันสำหรับเพิ่มคำศัพท์แบบหลายคำ
+  // บันทึกคำศัพท์แบบหลายคำ
   const addBulkWords = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!bulkData || !bulkLevel) {
       toast({
         title: "ข้อมูลไม่ครบถ้วน",
-        description: "กรุณากรอกข้อมูลคำศัพท์และเลือกระดับ",
+        description: "กรอกข้อมูลคำศัพท์และกระ",
         variant: "destructive",
       })
       return
@@ -317,10 +319,10 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
         .filter((pair) => pair.english && pair.thai)
 
       if (wordPairs.length === 0) {
-        throw new Error("ไม่พบคู่คำศัพท์ที่ถูกต้อง โปรดตรวจสอบรูปแบบข้อมูล")
+        throw new Error("ไม่พบคู่คำศัพท์ ต้อง โปรดตรวจสอบข้อมูล")
       }
 
-      // แบ่งคำศัพท์เป็นชุดๆ ละ 20 คำ เพื่อส่งทีละชุด
+      // แบ่งคำศัพท์เป็นๆ ละ 20 คำ เอ่อส่งละ
       const batchSize = 20
       const batches = []
       for (let i = 0; i < wordPairs.length; i += batchSize) {
@@ -331,7 +333,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       let addedCount = 0
       let updatedCount = 0
 
-      // ส่งข้อมูลทีละชุด
+      // ส่งข้อมูลละ
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i]
 
@@ -352,22 +354,22 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
 
         const data = await response.json()
 
-        // อัพเดตจำนวนคำที่เพิ่มและอัพเดต
+        // ตั้งค่าจำนวนคำบันทึกและอัปเดต
         addedCount += data.addedCount
         updatedCount += data.updatedCount
         processedCount += batch.length
 
-        // อัพเดตความคืบหน้า
+        // ตั้งค่าความคืบหน้า
         const progress = Math.round((processedCount / wordPairs.length) * 100)
         setUploadProgress(progress)
       }
 
       toast({
-        title: "เพิ่มคำศัพท์แบบหลายคำสำเร็จ",
-        description: `เพิ่มคำศัพท์ ${addedCount} คำ, อัปเดต ${updatedCount} คำ`,
+        title: "บันทึกคำศัพท์แบบหลายคำสำเร็จ",
+        description: `บันทึกคำศัพท์ ${addedCount} คำ, อัปเดต ${updatedCount} คำ`,
       })
 
-      // รีเซ็ตฟอร์ม
+      // ตั้งค่าฟอร์ม
       setBulkData("")
       setUploadProgress(0)
       setIsUploading(false)
@@ -375,13 +377,13 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       // โหลดคำศัพท์ใหม่
       loadWords()
 
-      // กลับไปที่แท็บดูคำศัพท์
+      // ไปแท็บคำศัพท์
       setActiveTab("view")
     } catch (error) {
       console.error("Error adding bulk words:", error)
       toast({
-        title: "เกิดข้อผิดพลาด",
-        description: error instanceof Error ? error.message : "ไม่สามารถเพิ่มคำศัพท์แบบหลายคำได้",
+        title: "ข้อผิดพลาด",
+        description: error instanceof Error ? error.message : "ไม่สามารถบันทึกคำศัพท์แบบหลายคำได้",
         variant: "destructive",
       })
       setUploadProgress(0)
@@ -391,10 +393,9 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // ฟังก์ชันสำหรับดาวน์โหลดเทมเพลต
+  // ดาวน์โหลดเทมเพลต
   const downloadTemplate = () => {
-    const template = `book,หนังสือ
-house,บ้าน
+    const template = `book,house,บ้าน
 car,รถยนต์
 water,น้ำ
 food,อาหาร`
@@ -414,43 +415,43 @@ food,อาหาร`
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>สถิติคำศัพท์</CardTitle>
-          <CardDescription>ข้อมูลสถิติเกี่ยวกับคำศัพท์ในฐานข้อมูล</CardDescription>
+          <CardTitle>คำศัพท์</CardTitle>
+          <CardDescription>ข้อมูลเกี่ยวคำศัพท์ในฐานข้อมูล</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-lg border p-3">
-              <div className="text-sm font-medium text-muted-foreground">จำนวนคำศัพท์ทั้งหมด</div>
+              <div className="text-sm font-medium text-muted-foreground">จำนวนคำศัพท์ส้งหมด</div>
               <div className="mt-1 text-2xl font-bold">{wordCount}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-sm font-medium text-muted-foreground">คำศัพท์ที่แสดงในตาราง</div>
+              <div className="text-sm font-medium text-muted-foreground">คำศัพท์แสดงในตาราง</div>
               <div className="mt-1 text-2xl font-bold">{words.length}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-sm font-medium text-muted-foreground">การจัดการ</div>
+              <div className="text-sm font-medium text-muted-foreground">การ</div>
               <div className="mt-1 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={addSampleWords} disabled={isLoading}>
-                  เพิ่มคำศัพท์ตัวอย่าง
+                  เบิกคำศัพท์อย่าง
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="outline" size="sm" className="text-destructive">
                       <AlertTriangle className="mr-2 h-4 w-4" />
-                      รีเซตความคืบหน้า
+                      ตั้งค่าความคืบหน้า
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>คุณแน่ใจหรือไม่?</AlertDialogTitle>
+                      <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        การรีเซตความคืบหน้าจะลบประวัติการเรียนรู้คำศัพท์ทั้งหมดของคุณ และเริ่มต้นใหม่ที่ระดับ A1
+                        การตั้งค่าความคืบหน้าจะลบการเรียนคำศัพท์ส้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
                       <AlertDialogAction onClick={resetProgress} className="bg-destructive text-destructive-foreground">
-                        รีเซตความคืบหน้า
+                        ตั้งค่าความคืบหน้า
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -462,15 +463,17 @@ food,อาหาร`
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="flex justify-between items-center mb-4">
-          <TabsList>
-            <TabsTrigger value="view">ดูคำศัพท์</TabsTrigger>
-            <TabsTrigger value="add">{formData._id ? "แก้ไขคำศัพท์" : "เพิ่มคำศัพท์"}</TabsTrigger>
-            <TabsTrigger value="bulk">เพิ่มคำศัพท์หลายคำ</TabsTrigger>
+        <div className={`${isMobile ? 'flex flex-col gap-4' : 'flex justify-between items-center'} mb-4`}>
+          <TabsList className={isMobile ? 'w-full' : ''}>
+            <TabsTrigger value="view" className={isMobile ? 'flex-1' : ''}>คำศัพท์</TabsTrigger>
+            <TabsTrigger value="add" className={isMobile ? 'flex-1' : ''}>
+              {formData._id ? "แก้ไขคำศัพท์" : "บันทึกคำศัพท์"}
+            </TabsTrigger>
+            <TabsTrigger value="bulk" className={isMobile ? 'flex-1' : ''}>บันทึกหลายคำ</TabsTrigger>
           </TabsList>
 
           {activeTab === "view" && (
-            <div className="flex gap-2">
+            <div className={`flex ${isMobile ? 'flex-col w-full' : ''} gap-2`}>
               <Button
                 onClick={() => {
                   setFormData({
@@ -482,28 +485,36 @@ food,อาหาร`
                   setActiveTab("add")
                 }}
                 disabled={isLoading}
+                className={isMobile ? 'w-full' : ''}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                เพิ่มคำศัพท์ใหม่
+                เบิกคำศัพท์ใหม่
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" disabled={isLoading}>
+                  <Button 
+                    variant="destructive" 
+                    disabled={isLoading}
+                    className={isMobile ? 'w-full' : ''}
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    ล้างคำศัพท์ทั้งหมด
+                    ล้างคำศัพท์ส้งหมด
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>คุณแน่ใจหรือไม่?</AlertDialogTitle>
+                    <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      การล้างคำศัพท์ทั้งหมดจะลบคำศัพท์ทั้งหมดในฐานข้อมูล การกระทำนี้ไม่สามารถย้อนกลับได้
+                      การล้างคำศัพท์ส้งหมดจะลบคำศัพท์ส้งหมดในฐานข้อมูล การกระทำไม่สามารถย้อนกลับได้
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                    <AlertDialogAction onClick={clearAllWords} className="bg-destructive text-destructive-foreground">
-                      ล้างคำศัพท์ทั้งหมด
+                    <AlertDialogAction 
+                      onClick={clearAllWords} 
+                      className="bg-destructive text-destructive-foreground"
+                    >
+                      ล้างคำศัพท์ส้งหมด
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -516,10 +527,10 @@ food,อาหาร`
           <Card>
             <CardHeader>
               <CardTitle>รายการคำศัพท์</CardTitle>
-              <CardDescription>ค้นหาและจัดการคำศัพท์ในฐานข้อมูล</CardDescription>
+              <CardDescription>ค้นหาและคำศัพท์ในฐานข้อมูล</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col md:flex-row gap-4 mb-4">
+              <div className={`${isMobile ? 'flex flex-col' : 'flex flex-col md:flex-row'} gap-4 mb-4`}>
                 <div className="flex-1">
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -531,13 +542,13 @@ food,อาหาร`
                     />
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-2`}>
                   <Select value={levelFilter} onValueChange={setLevelFilter}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="กรองตามระดับ" />
+                    <SelectTrigger className={isMobile ? 'w-full' : 'w-[180px]'}>
+                      <SelectValue placeholder="กรองตาม" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">ทุกระดับ</SelectItem>
+                      <SelectItem value="all">คกระหาร</SelectItem>
                       <SelectItem value="a1">A1</SelectItem>
                       <SelectItem value="a2">A2</SelectItem>
                       <SelectItem value="b1">B1</SelectItem>
@@ -546,7 +557,12 @@ food,อาหาร`
                       <SelectItem value="c2">C2</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button onClick={loadWords} disabled={isLoading} variant="outline" className="w-full sm:w-auto">
+                  <Button 
+                    onClick={loadWords} 
+                    disabled={isLoading} 
+                    variant="outline"
+                    className={isMobile ? 'w-full' : ''}
+                  >
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
                     โหลดคำศัพท์
                   </Button>
@@ -558,17 +574,17 @@ food,อาหาร`
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>คำศัพท์ภาษาอังกฤษ</TableHead>
+                        <TableHead>คำศัพท์</TableHead>
                         <TableHead>คำแปลภาษาไทย</TableHead>
                         <TableHead>ระดับ</TableHead>
-                        <TableHead className="w-[100px]">จัดการ</TableHead>
+                        <TableHead className="w-[100px]">การจัดการ</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {words.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-8">
-                            {isLoading ? "กำลังโหลด..." : "ไม่พบคำศัพท์ในฐานข้อมูล"}
+                            {isLoading ? "โหลด..." : "ไม่พบคำศัพท์ในฐานข้อมูล"}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -584,7 +600,7 @@ food,อาหาร`
                                   onClick={() => playPronunciation(word.english)}
                                 >
                                   <Volume2 className="h-4 w-4" />
-                                  <span className="sr-only">ฟังเสียง</span>
+                                  <span className="sr-only">เล่นคำศัพท์</span>
                                 </Button>
                               </div>
                             </TableCell>
@@ -628,19 +644,19 @@ food,อาหาร`
         <TabsContent value="add">
           <Card>
             <CardHeader>
-              <CardTitle>{formData._id ? `แก้ไขคำศัพท์: ${formData.english}` : "เพิ่มคำศัพท์ใหม่"}</CardTitle>
-              <CardDescription>กรอกข้อมูลคำศัพท์ที่ต้องการเพิ่มหรือแก้ไข</CardDescription>
+              <CardTitle>{formData._id ? `แก้ไขคำศัพท์: ${formData.english}` : "บันทึกคำศัพท์ใหม่"}</CardTitle>
+              <CardDescription>กรอกข้อมูลคำศัพท์ที่ต้องการบันทึกหรือแก้ไข</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={saveWord} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="english">คำศัพท์ภาษาอังกฤษ</Label>
+                    <Label htmlFor="english">คำศัพท์</Label>
                     <Input
                       id="english"
                       value={formData.english}
                       onChange={(e) => setFormData({ ...formData, english: e.target.value })}
-                      placeholder="กรอกคำศัพท์ภาษาอังกฤษ"
+                      placeholder="กรอกคำศัพท์"
                       required
                     />
                   </div>
@@ -659,7 +675,7 @@ food,อาหาร`
                   <Label htmlFor="level">ระดับ CEFR</Label>
                   <Select value={formData.level} onValueChange={(value) => setFormData({ ...formData, level: value })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="เลือกระดับ CEFR" />
+                      <SelectValue placeholder="กรองตามระดับ CEFR" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="a1">A1</SelectItem>
@@ -689,7 +705,7 @@ food,อาหาร`
                       ยกเลิก
                     </Button>
                     <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "กำลังบันทึก..." : formData._id ? "อัปเดตคำศัพท์" : "เพิ่มคำศัพท์"}
+                      {isLoading ? "..." : formData._id ? "อัปเดตคำศัพท์" : "บันทึกคำศัพท์"}
                     </Button>
                   </div>
                 </CardFooter>
@@ -701,9 +717,9 @@ food,อาหาร`
         <TabsContent value="bulk">
           <Card>
             <CardHeader>
-              <CardTitle>เพิ่มคำศัพท์หลายคำ</CardTitle>
+              <CardTitle>บันทึกคำศัพท์หลายคำ</CardTitle>
               <CardDescription>
-                เพิ่มคำศัพท์หลายคำพร้อมกัน โดยใช้รูปแบบ "คำศัพท์ภาษาอังกฤษ,คำแปลภาษาไทย" แต่ละคู่คำศัพท์ให้อยู่คนละบรรทัด
+                บันทึกคำศัพท์หลายคำพร้อมคำแปลภาษาไทย โดยใช้ "คำศัพท์,คำแปลภาษาไทย" แต่ละคู่คำศัพท์ให้อยู่คนละบรรทัด
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -720,8 +736,7 @@ food,อาหาร`
                     id="bulkData"
                     value={bulkData}
                     onChange={(e) => setBulkData(e.target.value)}
-                    placeholder="book,หนังสือ
-house,บ้าน
+                    placeholder="book,house,บ้าน
 car,รถยนต์"
                     className="min-h-[200px]"
                     required
@@ -729,19 +744,19 @@ car,รถยนต์"
                   {isUploading && (
                     <div className="mt-4 space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span>กำลังอัพโหลด...</span>
+                        <span>กำลังโหลด...</span>
                         <span>{uploadProgress}%</span>
                       </div>
                       <Progress value={uploadProgress} className="h-2" />
                     </div>
                   )}
-                  <p className="text-sm text-muted-foreground">แต่ละบรรทัดควรมีรูปแบบ "คำศัพท์ภาษาอังกฤษ,คำแปลภาษาไทย"</p>
+                  <p className="text-sm text-muted-foreground">แต่ละบรรทัดควรเป็น "คำศัพท์,คำแปลภาษาไทย"</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bulkLevel">ระดับ CEFR</Label>
                   <Select value={bulkLevel} onValueChange={setBulkLevel}>
                     <SelectTrigger>
-                      <SelectValue placeholder="เลือกระดับ CEFR" />
+                      <SelectValue placeholder="กรองตามระดับ CEFR" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="a1">A1</SelectItem>
@@ -766,7 +781,7 @@ car,รถยนต์"
                       ยกเลิก
                     </Button>
                     <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "กำลังบันทึก..." : "เพิ่มคำศัพท์"}
+                      {isLoading ? "..." : "บันทึกคำศัพท์"}
                       <Upload className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -779,3 +794,4 @@ car,รถยนต์"
     </div>
   )
 }
+
