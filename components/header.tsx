@@ -58,14 +58,9 @@ export function Header({ user }: HeaderProps) {
               <Button variant="outline" size="icon" className="rounded-full">
                 {user?.image ? (
                   <img
-                    src={user.image || "/placeholder.svg?height=32&width=32"}
+                    src={user.image || "/placeholder.svg"}
                     alt={user.name || "User"}
                     className="h-8 w-8 rounded-full"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      // Fallback เมื่อโหลดรูปไม่สำเร็จ
-                      e.currentTarget.src = "/placeholder.svg?height=32&width=32"
-                    }}
                   />
                 ) : (
                   <User className="h-5 w-5" />

@@ -24,7 +24,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Progress } from "@/components/ui/progress"
 
 interface WordManagerProps {
   wordCount: number
@@ -45,8 +44,6 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
   })
   const [bulkData, setBulkData] = useState("")
   const [bulkLevel, setBulkLevel] = useState("a1")
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
 
   // ฟังก์ชันสำหรับโหลดคำศัพท์
@@ -302,8 +299,6 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
 
     try {
       setIsLoading(true)
-      setIsUploading(true)
-      setUploadProgress(0)
 
       // แยกข้อมูลเป็นคู่คำศัพท์
       const wordPairs = bulkData
@@ -320,57 +315,30 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
         throw new Error("ไม่พบคู่คำศัพท์ที่ถูกต้อง โปรดตรวจสอบรูปแบบข้อมูล")
       }
 
-      // แบ่งคำศัพท์เป็นชุดๆ ละ 20 คำ เพื่อส่งทีละชุด
-      const batchSize = 20
-      const batches = []
-      for (let i = 0; i < wordPairs.length; i += batchSize) {
-        batches.push(wordPairs.slice(i, i + batchSize))
+      const response = await fetch("/api/words/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          words: wordPairs,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to add bulk words")
       }
 
-      let processedCount = 0
-      let addedCount = 0
-      let updatedCount = 0
-
-      // ส่งข้อมูลทีละชุด
-      for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i]
-
-        const response = await fetch("/api/words/bulk", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            words: batch,
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to add bulk words")
-        }
-
-        const data = await response.json()
-
-        // อัพเดตจำนวนคำที่เพิ่มและอัพเดต
-        addedCount += data.addedCount
-        updatedCount += data.updatedCount
-        processedCount += batch.length
-
-        // อัพเดตความคืบหน้า
-        const progress = Math.round((processedCount / wordPairs.length) * 100)
-        setUploadProgress(progress)
-      }
+      const data = await response.json()
 
       toast({
         title: "เพิ่มคำศัพท์แบบหลายคำสำเร็จ",
-        description: `เพิ่มคำศัพท์ ${addedCount} คำ, อัปเดต ${updatedCount} คำ`,
+        description: `เพิ่มคำศัพท์ ${data.addedCount} คำ, อัปเดต ${data.updatedCount} คำ`,
       })
 
       // รีเซ็ตฟอร์ม
       setBulkData("")
-      setUploadProgress(0)
-      setIsUploading(false)
 
       // โหลดคำศัพท์ใหม่
       loadWords()
@@ -384,8 +352,6 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
         description: error instanceof Error ? error.message : "ไม่สามารถเพิ่มคำศัพท์แบบหลายคำได้",
         variant: "destructive",
       })
-      setUploadProgress(0)
-      setIsUploading(false)
     } finally {
       setIsLoading(false)
     }
@@ -726,15 +692,6 @@ car,รถยนต์"
                     className="min-h-[200px]"
                     required
                   />
-                  {isUploading && (
-                    <div className="mt-4 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>กำลังอัพโหลด...</span>
-                        <span>{uploadProgress}%</span>
-                      </div>
-                      <Progress value={uploadProgress} className="h-2" />
-                    </div>
-                  )}
                   <p className="text-sm text-muted-foreground">แต่ละบรรทัดควรมีรูปแบบ "คำศัพท์ภาษาอังกฤษ,คำแปลภาษาไทย"</p>
                 </div>
                 <div className="space-y-2">
