@@ -432,7 +432,7 @@ food,อาหาร`
               <div className="text-sm font-medium text-muted-foreground">การ</div>
               <div className="mt-1 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={addSampleWords} disabled={isLoading}>
-                  เบิกคำศัพท์อย่าง
+                  เพิ่มคำศัพท์ตัวอย่าง
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -488,7 +488,7 @@ food,อาหาร`
                 className={isMobile ? 'w-full' : ''}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                เบิกคำศัพท์ใหม่
+                เพิ่มคำศัพท์ใหม่
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
