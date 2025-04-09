@@ -5,10 +5,25 @@ import clientPromise from "@/lib/mongodb"
 
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
+  debug: process.env.NODE_ENV === "development",
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      authorization: {
+        params: {
+          scope: "openid email profile",
+          prompt: "consent",
+        },
+      },
+      profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture,
+        }
+      },
     }),
   ],
   callbacks: {
@@ -17,10 +32,14 @@ export const authOptions: NextAuthOptions = {
         // ใช้ token.sub สำหรับ JWT strategy
         if (token?.sub) {
           session.user.id = token.sub
+          // เพิ่มการส่งต่อรูปภาพจาก token
+          session.user.image = token.picture || session.user.image
         }
         // ใช้ user.id สำหรับ database strategy
         else if (user?.id) {
           session.user.id = user.id
+          // เพิ่มการส่งต่อรูปภาพจาก user
+          session.user.image = user.image || session.user.image
         }
 
         try {

@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
-import { authOptions } from "@/lib/auth" // ✅ สำคัญมาก
 
 export async function middleware(request: NextRequest) {
-  console.log("🛡️ Middleware running for path:", request.nextUrl.pathname)
+  console.log("Server Middleware running for path:", request.nextUrl.pathname)
 
-  // ถ้าเป็นเส้นทาง static, API หรือ next assets → ข้าม
+  // ถ้าเป็นเส้นทางที่เกี่ยวกับ API หรือ static files ให้ข้ามไป
   if (
     request.nextUrl.pathname.startsWith("/_next") ||
     request.nextUrl.pathname.startsWith("/api") ||
@@ -15,26 +14,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // ✅ ดึง token พร้อม secret จาก authOptions
   const token = await getToken({
     req: request,
-    secret: authOptions.secret,
+    secret: process.env.NEXTAUTH_SECRET,
   })
 
-  console.log("🍪 Cookies:", request.cookies.getAll())
-  console.log("🔐 Token:", token ? "✅ exists" : "❌ does not exist")
+  console.log("Server Token in middleware:", token ? "exists" : "does not exist")
 
-  // ❌ ถ้าไม่มี token → redirect ไปหน้า login ("/")
+  // ถ้าไม่มี token และไม่ได้อยู่ที่หน้าแรก ให้ redirect ไปหน้าแรก
   if (!token && request.nextUrl.pathname !== "/") {
-    console.log("➡️ Redirecting to home page - no token")
+    console.log("Server Redirecting to home page - no token")
     return NextResponse.redirect(new URL("/", request.url))
   }
 
-  // ✅ ถ้ามี token และพยายามเข้าหน้า "/" → redirect ไป "/game"
+  // ถ้ามี token และอยู่ที่หน้าแรก ให้ redirect ไปหน้าเกม
   if (token && request.nextUrl.pathname === "/") {
-    console.log("➡️ Redirecting to game page - has token")
+    console.log("Server Redirecting to game page - has token")
     return NextResponse.redirect(new URL("/game", request.url))
   }
+
+  // ยกเลิกการตรวจสอบสิทธิ์แอดมินสำหรับหน้า dashboard
+  // ทุกคนที่ล็อกอินแล้วสามารถเข้าถึงได้
 
   return NextResponse.next()
 }
