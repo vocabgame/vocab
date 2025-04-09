@@ -240,16 +240,32 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   }
 
   // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
-  const prefetchNextWord = async (currentWordId: string) => {
+  const prefetchNextWord = async (currentWordId: string, batchSize = 10) => {
     try {
-      console.log(`Prefetching next words for word ID: ${currentWordId}`);
+      // ลองดึงข้อมูลจาก cache ก่อน
+      const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
+      try {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          if (parsedData && parsedData.nextWords && parsedData.nextWords.length > 0) {
+            console.log(`Using ${parsedData.nextWords.length} words from cache`);
+            setNextWordData(parsedData);
+            return parsedData;
+          }
+        }
+      } catch (cacheError) {
+        console.error("Error reading from cache:", cacheError);
+      }
+
+      console.log(`Prefetching next words for word ID: ${currentWordId} (batch size: ${batchSize})`);
 
       // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
       const controller = new AbortController();
       const signal = controller.signal;
 
       // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // เพิ่มเวลาเป็น 30 วินาทีเพราะต้องโหลดคำศัพท์มาก
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // ลดเวลาลงเป็น 8 วินาทีเพื่อให้ทำงานได้บน Vercel
 
       // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
       console.log(`Sending request to fetch next words...`);
@@ -266,7 +282,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           body: JSON.stringify({
             userId,
             currentWordId,
-            prefetchCount: 20, // ลดจำนวนคำศัพท์ที่โหลดลงเพื่อให้เร็วขึ้น
+            prefetchCount: batchSize, // ใช้ขนาด batch ที่กำหนด
           }),
           signal, // ใช้ signal จาก AbortController
         });
@@ -281,6 +297,14 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         console.log(`Response received, parsing JSON...`);
         const data = await response.json();
         console.log(`Successfully fetched ${data.nextWords ? data.nextWords.length : 0} next words`);
+
+        // เก็บข้อมูลใน cache
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+          console.log(`Saved words to cache with key: ${cacheKey}`);
+        } catch (cacheError) {
+          console.error("Error saving to cache:", cacheError);
+        }
 
         // เก็บข้อมูลคำศัพท์ที่โหลดล่วงหน้า
         setNextWordData(data);
@@ -299,28 +323,33 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       }
 
       // ลองโหลดคำศัพท์น้อยลง
-      try {
-        console.log("Retrying with fewer words...");
-        const retryResponse = await fetch("/api/words/next", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId,
-            currentWordId,
-            prefetchCount: 3, // โหลดแค่ 3 คำเพื่อให้เร็วขึ้น
-          }),
-        });
+      if (batchSize > 3) {
+        console.log(`Retrying with smaller batch size: ${Math.floor(batchSize / 2)}`);
+        return prefetchNextWord(currentWordId, Math.floor(batchSize / 2));
+      } else {
+        try {
+          console.log("Retrying with minimum batch size...");
+          const retryResponse = await fetch("/api/words/next", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              currentWordId,
+              prefetchCount: 1, // โหลดแค่ 1 คำเพื่อให้เร็วที่สุด
+            }),
+          });
 
-        if (retryResponse.ok) {
-          const retryData = await retryResponse.json();
-          console.log(`Retry successful, fetched ${retryData.nextWords ? retryData.nextWords.length : 0} words`);
-          setNextWordData(retryData);
-          return retryData;
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            console.log(`Retry successful, fetched ${retryData.nextWords ? retryData.nextWords.length : 0} words`);
+            setNextWordData(retryData);
+            return retryData;
+          }
+        } catch (retryError) {
+          console.error("Error in retry attempt:", retryError);
         }
-      } catch (retryError) {
-        console.error("Error in retry attempt:", retryError);
       }
 
       return null;
@@ -331,15 +360,36 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     try {
       setIsLoadingNext(true)
 
-      // ถ้าข้อมูลคำถัดไปไว้ล่วงหน้าแล้ว ให้ใช้ข้อมูลนั้นเลย
-      let data = nextWordData
+      // ลองดึงข้อมูลจาก cache ก่อน
+      const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
+      let data = null;
+
+      try {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          if (parsedData && parsedData.word) {
+            console.log(`Using data from cache with key: ${cacheKey}`);
+            data = parsedData;
+          }
+        }
+      } catch (cacheError) {
+        console.error("Error reading from cache:", cacheError);
+      }
+
+      // ถ้าไม่มีข้อมูลใน cache ให้ใช้ข้อมูลจาก nextWordData
+      if (!data && nextWordData) {
+        console.log("Using data from nextWordData");
+        data = nextWordData;
+      }
 
       // ถ้าไม่มีข้อมูลคำถัดไป ให้ขอข้อมูลใหม่
       if (!data) {
-        // แสดงสถานะการโหลดคำศัพท์ทั้งหมดในด่าน
+        console.log("No cached data available, fetching from server...");
+        // แสดงสถานะการโหลดคำศัพท์
         toast({
           title: "กำลังโหลดคำศัพท์",
-          description: "กำลังโหลดคำศัพท์ทั้งหมดในด่าน กรุณารอสักครู่...",
+          description: "กำลังโหลดคำศัพท์ กรุณารอสักครู่...",
           duration: 3000,
         });
 
@@ -348,31 +398,65 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         const signal = controller.signal;
 
         // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพราะต้องโหลดคำศัพท์หลายคำ
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // ลดเวลาลงเป็น 8 วินาทีเพื่อให้ทำงานได้บน Vercel
 
-        const response = await fetch("/api/words/next", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache"
-          },
-          body: JSON.stringify({
-            userId,
-            currentWordId,
-            prefetchCount: 100, // โหลดคำศัพท์ทั้งหมดในด่าน (100 คำ)
-          }),
-          signal, // ใช้ signal จาก AbortController
-        })
+        try {
+          const response = await fetch("/api/words/next", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache"
+            },
+            body: JSON.stringify({
+              userId,
+              currentWordId,
+              prefetchCount: 10, // ลดจำนวนคำศัพท์ที่โหลดลงเพื่อให้เร็วขึ้น
+            }),
+            signal, // ใช้ signal จาก AbortController
+          });
 
-        // ยกเลิกการตั้งเวลา
-        clearTimeout(timeoutId);
+          // ยกเลิกการตั้งเวลา
+          clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error("Failed to get next word")
+          if (!response.ok) {
+            throw new Error(`Failed to get next word: ${response.status} ${response.statusText}`);
+          }
+
+          data = await response.json();
+
+          // เก็บข้อมูลใน cache
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+            console.log(`Saved data to cache with key: ${cacheKey}`);
+          } catch (cacheError) {
+            console.error("Error saving to cache:", cacheError);
+          }
+        } catch (fetchError) {
+          // ยกเลิกการตั้งเวลาถ้ายังไม่ถูกยกเลิก
+          clearTimeout(timeoutId);
+
+          // ลองโหลดคำศัพท์น้อยลง
+          console.log("Retrying with fewer words...");
+          const retryResponse = await fetch("/api/words/next", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              currentWordId,
+              prefetchCount: 1, // โหลดแค่ 1 คำเพื่อให้เร็วที่สุด
+            }),
+          });
+
+          if (retryResponse.ok) {
+            data = await retryResponse.json();
+            console.log("Retry successful");
+          } else {
+            throw new Error("Failed to get next word even with retry");
+          }
         }
-
-        data = await response.json()
       }
 
       // เซ็ตข้อมูลคำถัดไปไว้ล่วงหน้า
@@ -580,49 +664,88 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         setIsLoading(false);
         return;
       } else {
-        // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ prefetch ก่อน
-        console.log("No prefetched words, fetching new word");
+        // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ลองดึงจาก cache ก่อน
+        console.log("No prefetched words, checking cache...");
+
+        // ลองดึงข้อมูลจาก cache
+        const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
+        let cachedData = null;
+
+        try {
+          const cachedString = localStorage.getItem(cacheKey);
+          if (cachedString) {
+            cachedData = JSON.parse(cachedString);
+            if (cachedData && cachedData.word) {
+              console.log(`Using cached data for next word`);
+              // เปลี่ยนไปคำถัดไปทันทีโดยใช้ข้อมูลจาก cache
+              setNextWordData(cachedData);
+              handleNext();
+              return;
+            }
+          }
+        } catch (cacheError) {
+          console.error("Error reading from cache:", cacheError);
+        }
+
+        // ถ้าไม่มีข้อมูลใน cache ให้ prefetch คำถัดไป
+        console.log("No cached data, fetching new word");
         prefetchNextWord(word._id);
 
         // อัพเดตความคืบหน้าแบบ blocking เพื่อให้แน่ใจว่าข้อมูลถูกบันทึก
-        const response = await fetch("/api/progress", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId,
-            wordId: word._id,
-            correct: true,
-          }),
-        });
+        try {
+          const controller = new AbortController();
+          const signal = controller.signal;
+          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 วินาที
 
-        if (!response.ok) {
-          throw new Error("Failed to update progress");
-        }
+          const response = await fetch("/api/progress", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              wordId: word._id,
+              correct: true,
+            }),
+            signal,
+          });
 
-        // ปรับปรุงความคืบหน้า
-        const updatedProgress = await response.json();
-        setCurrentProgress(updatedProgress.progress);
+          clearTimeout(timeoutId);
 
-        // ปรับปรุงสถิติ
-        if (currentStats) {
-          const updatedStats = { ...currentStats };
-          updatedStats.completedWords += 1;
-
-          const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
-          if (levelIndex !== -1) {
-            updatedStats.levels[levelIndex].completed += 1;
-
-            const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-              (s) => s.stage === currentProgress.currentStage,
-            );
-            if (stageIndex !== -1) {
-              updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
-            }
+          if (!response.ok) {
+            throw new Error("Failed to update progress");
           }
 
-          setCurrentStats(updatedStats);
+          // ปรับปรุงความคืบหน้า
+          const updatedProgress = await response.json();
+          setCurrentProgress(updatedProgress.progress);
+
+          // ปรับปรุงสถิติ
+          if (currentStats) {
+            const updatedStats = { ...currentStats };
+            updatedStats.completedWords += 1;
+
+            const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
+            if (levelIndex !== -1) {
+              updatedStats.levels[levelIndex].completed += 1;
+
+              const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
+                (s) => s.stage === currentProgress.currentStage,
+              );
+              if (stageIndex !== -1) {
+                updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
+              }
+            }
+
+            setCurrentStats(updatedStats);
+          }
+        } catch (progressError) {
+          if (progressError instanceof DOMException && progressError.name === 'AbortError') {
+            console.log('Progress update was aborted due to timeout');
+          } else {
+            console.error("Error updating progress:", progressError);
+            throw progressError;
+          }
         }
 
         // เปลี่ยนไปคำถัดไปทันที
