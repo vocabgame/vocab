@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { BookOpen, BarChart3, LogOut, User, Database, Layers } from "lucide-react"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { BookOpen, BarChart3, LogOut, User, Database, Layers, Menu } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 interface HeaderProps {
   user: {
@@ -18,6 +20,62 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
   const pathname = usePathname()
+  const isMobile = useIsMobile()
+
+  const navigationItems = [
+    { href: "/game", label: "เล่นเกม", icon: null },
+    { href: "/level-select", label: "เลือกระดับ", icon: <Layers className="h-4 w-4" /> },
+    { href: "/progress", label: "ความคืบหน้า", icon: <BarChart3 className="h-4 w-4" /> },
+    { href: "/manage-words", label: "จัดการคำศัพท์", icon: <Database className="h-4 w-4" /> },
+  ]
+
+  const NavigationLinks = () => (
+    <>
+      {navigationItems.map((item) => (
+        <Link key={item.href} href={item.href}>
+          <Button 
+            variant={pathname === item.href ? "default" : "ghost"}
+            className="w-full justify-start"
+          >
+            {item.icon && <span className="mr-2">{item.icon}</span>}
+            {item.label}
+          </Button>
+        </Link>
+      ))}
+    </>
+  )
+
+  const UserButton = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" className="rounded-full">
+          {user?.image ? (
+            <img
+              src={user.image || "/placeholder.svg?height=32&width=32"}
+              alt={user.name || "User"}
+              className="h-8 w-8 rounded-full"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.src = "/placeholder.svg?height=32&width=32"
+              }}
+            />
+          ) : (
+            <User className="h-5 w-5" />
+          )}
+          <span className="sr-only">้ใช้</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem disabled>
+          <span>{user?.name || user?.email}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>ออกจากระบบ</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background">
@@ -30,61 +88,36 @@ export function Header({ user }: HeaderProps) {
         </div>
 
         <nav className="flex items-center gap-4">
-          <Link href="/game">
-            <Button variant={pathname === "/game" ? "default" : "ghost"}>เล่นเกม</Button>
-          </Link>
-          <Link href="/level-select">
-            <Button variant={pathname === "/level-select" ? "default" : "ghost"}>
-              <Layers className="mr-2 h-4 w-4" />
-              เลือกระดับ
-            </Button>
-          </Link>
-          <Link href="/progress">
-            <Button variant={pathname === "/progress" ? "default" : "ghost"}>
-              <BarChart3 className="mr-2 h-4 w-4" />
-              ความคืบหน้า
-            </Button>
-          </Link>
-
-          <Link href="/manage-words">
-            <Button variant={pathname === "/manage-words" ? "default" : "ghost"}>
-              <Database className="mr-2 h-4 w-4" />
-              จัดการคำศัพท์
-            </Button>
-          </Link>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-full">
-                {user?.image ? (
-                  <img
-                    src={user.image || "/placeholder.svg?height=32&width=32"}
-                    alt={user.name || "User"}
-                    className="h-8 w-8 rounded-full"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      // Fallback เมื่อโหลดรูปไม่สำเร็จ
-                      e.currentTarget.src = "/placeholder.svg?height=32&width=32"
-                    }}
-                  />
-                ) : (
-                  <User className="h-5 w-5" />
-                )}
-                <span className="sr-only">เมนูผู้ใช้</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled>
-                <span>{user?.name || user?.email}</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>ออกจากระบบ</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {isMobile ? (
+            <div className="flex items-center gap-2">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <Menu className="h-5 w-5" />
+                    <span className="sr-only">เมนู</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[240px] sm:w-[300px]">
+                  <nav className="flex flex-col gap-2 mt-6">
+                    <NavigationLinks />
+                  </nav>
+                </SheetContent>
+              </Sheet>
+              <UserButton />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <NavigationLinks />
+              </div>
+              <UserButton />
+            </>
+          )}
         </nav>
       </div>
     </header>
   )
 }
+
+
+
