@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings } from "lucide-react"
+import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings, FastForward } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -74,6 +74,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   const [showStageComplete, setShowStageComplete] = useState(false)
   const [showLevelComplete, setShowLevelComplete] = useState(false)
   const [nextWordData, setNextWordData] = useState<any>(null) // เล่มสถานะเพื่อเก็บข้อมูลคำถัดไป
+
+  // เพิ่มสถานะสำหรับการเล่นแบบดึงคำศัพท์ทั้งหมดของด่าน
+  const [stageWords, setStageWords] = useState<any[]>([]); // เก็บคำศัพท์ทั้งหมดของด่าน
+  const [currentWordIndex, setCurrentWordIndex] = useState<number>(0); // เก็บ index ของคำปัจจุบัน
+  const [isStageMode, setIsStageMode] = useState<boolean>(false); // โหมดการเล่นแบบดึงคำศัพท์ทั้งหมดของด่าน
+  const [isLoadingStage, setIsLoadingStage] = useState<boolean>(false); // สถานะการโหลดคำศัพท์ทั้งหมดของด่าน
+
   const { toast } = useToast()
   const router = useRouter()
 
@@ -85,6 +92,98 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       }
     }
   }, [autoAdvanceTimer])
+
+  // โหลดคำศัพท์ทั้งหมดของด่าน
+  const loadStageWords = useCallback(async () => {
+    if (isLoadingStage) return;
+
+    try {
+      setIsLoadingStage(true);
+      toast({
+        title: "กำลังโหลดคำศัพท์ทั้งหมดของด่าน",
+        description: "กรุณารอสักครู่...",
+        duration: 2000,
+      });
+
+      const response = await fetch("/api/words/stage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          level: currentProgress.currentLevel,
+          stage: currentProgress.currentStage,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load stage words");
+      }
+
+      const data = await response.json();
+
+      if (data.words && data.words.length > 0) {
+        setStageWords(data.words);
+        setCurrentWordIndex(0);
+        setIsStageMode(true);
+
+        // เริ่มเล่นด้วยคำแรก
+        const firstWordData = data.words[0];
+        setWord(firstWordData.word);
+        setChoices(firstWordData.choices);
+        setSelectedAnswer(null);
+        setIsCorrect(null);
+        setIsRevealed(false);
+
+        toast({
+          title: "โหลดคำศัพท์สำเร็จ",
+          description: `โหลดคำศัพท์ทั้งหมด ${data.words.length} คำสำเร็จแล้ว`,
+          duration: 2000,
+        });
+      } else {
+        toast({
+          title: "ไม่พบคำศัพท์",
+          description: "ไม่พบคำศัพท์ในด่านนี้",
+          variant: "destructive",
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error("Error loading stage words:", error);
+      toast({
+        title: "ข้อผิดพลาด",
+        description: error instanceof Error ? error.message : "ไม่สามารถโหลดคำศัพท์ได้",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsLoadingStage(false);
+    }
+  }, [userId, currentProgress.currentLevel, currentProgress.currentStage, isLoadingStage, toast]);
+
+  // ข้ามไปคำถัดไปในโหมดด่าน
+  const handleSkipWord = useCallback(() => {
+    if (!isStageMode || stageWords.length === 0) return;
+
+    // เพิ่ม index และเปลี่ยนไปคำถัดไป
+    const nextIndex = (currentWordIndex + 1) % stageWords.length;
+    setCurrentWordIndex(nextIndex);
+
+    // เปลี่ยนไปคำถัดไป
+    const nextWordData = stageWords[nextIndex];
+    setWord(nextWordData.word);
+    setChoices(nextWordData.choices);
+    setSelectedAnswer(null);
+    setIsCorrect(null);
+    setIsRevealed(false);
+  }, [isStageMode, stageWords, currentWordIndex]);
+
+  // ผ่านคำนี้ไป (ไม่บันทึกว่าเรียนแล้ว)
+  const handlePassWord = useCallback(() => {
+    // ทำเหมือนกับ handleSkipWord แต่ไม่บันทึกว่าเรียนแล้ว
+    handleSkipWord();
+  }, [handleSkipWord])
 
   const playPronunciation = () => {
     if (isSpeaking || !word || !word.english) return

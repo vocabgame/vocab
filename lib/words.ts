@@ -211,6 +211,122 @@ export async function getNextWord(userId: string, currentWordId: string) {
   }
 }
 
+export async function getWordsForStage(level: string, stage: number, completedWords: string[] = []) {
+  const client = await clientPromise
+  const db = client.db()
+
+  try {
+    // แปลง completedWords เป็น ObjectId
+    const completedWordIds = completedWords.map((id: string) => {
+      try {
+        return id.length === 24 ? new ObjectId(id) : id
+      } catch (e) {
+        return id
+      }
+    })
+
+    // คำนวณช่วงคำศัพท์ในด่านนี้
+    const startIndex = (stage - 1) * WORDS_PER_STAGE
+    const endIndex = stage * WORDS_PER_STAGE
+
+    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการ
+    const wordsInStage = await db
+      .collection("words")
+      .find({ level })
+      .sort({ _id: 1 })
+      .skip(startIndex)
+      .limit(WORDS_PER_STAGE)
+      .toArray()
+
+    // แบ่งคำศัพท์เป็นคำที่เรียนแล้วและยังไม่ได้เรียน
+    const completedWordsInStage = [];
+    const uncompletedWordsInStage = [];
+
+    for (const word of wordsInStage) {
+      const wordId = word._id.toString();
+      if (completedWords.includes(wordId)) {
+        completedWordsInStage.push(word);
+      } else {
+        uncompletedWordsInStage.push(word);
+      }
+    }
+
+    // สร้างตัวเลือกสำหรับแต่ละคำศัพท์
+    const wordsWithChoices = [];
+
+    // สร้างตัวเลือกสำหรับคำที่ยังไม่ได้เรียน (ให้ความสำคัญกับคำเหล่านี้ก่อน)
+    for (const word of uncompletedWordsInStage) {
+      const choices = await generateChoicesForWord(word, db);
+      wordsWithChoices.push({
+        word,
+        choices,
+        completed: false
+      });
+    }
+
+    // สร้างตัวเลือกสำหรับคำที่เรียนแล้ว (เพื่อทบทวน)
+    for (const word of completedWordsInStage) {
+      const choices = await generateChoicesForWord(word, db);
+      wordsWithChoices.push({
+        word,
+        choices,
+        completed: true
+      });
+    }
+
+    // แปลง ObjectId เป็น string สำหรับ client
+    return JSON.parse(JSON.stringify(wordsWithChoices));
+  } catch (error) {
+    console.error("Error getting words for stage:", error);
+    throw error;
+  }
+}
+
+async function generateChoicesForWord(word: any, db: any) {
+  // ดึงตัวเลือกอื่นๆ สำหรับคำนี้
+  const otherChoices = await db
+    .collection("words")
+    .aggregate([
+      { $match: { _id: { $ne: word._id }, thai: { $ne: word.thai } } },
+      { $project: { thai: 1 } },
+      { $sample: { size: 5 } },
+    ])
+    .toArray()
+
+  // กรองเอาเฉพาะคำที่ไม่ซ้ำกัน
+  const uniqueChoices = []
+  const usedTranslations = new Set([word.thai])
+
+  // เลือกคำที่ไม่ซ้ำกันมา 3 คำ
+  for (const otherWord of otherChoices) {
+    if (!usedTranslations.has(otherWord.thai)) {
+      uniqueChoices.push(otherWord.thai)
+      usedTranslations.add(otherWord.thai)
+      if (uniqueChoices.length >= 3) break
+    }
+  }
+
+  // ถ้าไม่ครบ 3 คำ ให้สร้างคำแปลสุ่มเพิ่ม
+  while (uniqueChoices.length < 3) {
+    const fakeTranslation = `ตัวเลือก ${uniqueChoices.length + 1}`
+    if (!usedTranslations.has(fakeTranslation)) {
+      uniqueChoices.push(fakeTranslation)
+      usedTranslations.add(fakeTranslation)
+    }
+  }
+
+  // สร้างตัวเลือกและสับเปลี่ยน
+  const choices = [word.thai, ...uniqueChoices]
+
+  // สับเปลี่ยนตัวเลือก
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [choices[i], choices[j]] = [choices[j], choices[i]];
+  }
+
+  return choices;
+}
+
 export async function getLevelStats(userId: string) {
   const client = await clientPromise
   const db = client.db()
