@@ -14,12 +14,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // เพิ่มการตรวจสอบ NEXTAUTH_SECRET
+  if (!process.env.NEXTAUTH_SECRET) {
+    console.error("Server Warning: NEXTAUTH_SECRET is not set properly")
+  }
+
   const token = await getToken({
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
   })
 
   console.log("Server Token in middleware:", token ? "exists" : "does not exist")
+
+  // แสดงรายละเอียดการตรวจสอบ cookie เพื่อการแก้ไขปัญหา
+  if (!token) {
+    const authCookie = request.cookies.get("next-auth.session-token") ||
+                      request.cookies.get("__Secure-next-auth.session-token")
+    console.log("Server Auth cookie exists:", !!authCookie)
+  }
 
   // ถ้าไม่มี token และไม่ได้อยู่ที่หน้าแรก ให้ redirect ไปหน้าแรก
   if (!token && request.nextUrl.pathname !== "/") {
