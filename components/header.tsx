@@ -29,25 +29,25 @@ export function Header({ user }: HeaderProps) {
           </Link>
         </div>
 
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-4 space-x-2 sm:space-x-4">
           <Link href="/game">
             <Button variant={pathname === "/game" ? "default" : "ghost"}>เล่นเกม</Button>
           </Link>
           <Link href="/level-select">
-            <Button variant={pathname === "/level-select" ? "default" : "ghost"}>
+            <Button variant={pathname === "/level-select" ? "default" : "ghost"} className="flex items-center">
               <Layers className="mr-2 h-4 w-4" />
               เลือกระดับ
             </Button>
           </Link>
           <Link href="/progress">
-            <Button variant={pathname === "/progress" ? "default" : "ghost"}>
+            <Button variant={pathname === "/progress" ? "default" : "ghost"} className="flex items-center">
               <BarChart3 className="mr-2 h-4 w-4" />
               ความคืบหน้า
             </Button>
           </Link>
 
           <Link href="/manage-words">
-            <Button variant={pathname === "/manage-words" ? "default" : "ghost"}>
+            <Button variant={pathname === "/manage-words" ? "default" : "ghost"} className="flex items-center">
               <Database className="mr-2 h-4 w-4" />
               จัดการคำศัพท์
             </Button>
