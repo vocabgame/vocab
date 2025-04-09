@@ -234,7 +234,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       const data = await response.json()
 
       toast({
-        title: "ล้างคำศัพท์ส้งหมดสำเร็จ",
+        title: "ล้างคำศัพท์ทั้งหมดสำเร็จ",
         description: data.message,
       })
 
@@ -296,7 +296,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     if (!bulkData || !bulkLevel) {
       toast({
         title: "ข้อมูลไม่ครบถ้วน",
-        description: "กรอกข้อมูลคำศัพท์และกระ",
+        description: "กรอกข้อมูลคำศัพท์และระดับ",
         variant: "destructive",
       })
       return
@@ -421,7 +421,7 @@ food,อาหาร`
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-lg border p-3">
-              <div className="text-sm font-medium text-muted-foreground">จำนวนคำศัพท์ส้งหมด</div>
+              <div className="text-sm font-medium text-muted-foreground">จำนวนคำศัพท์ทั้งหมด</div>
               <div className="mt-1 text-2xl font-bold">{wordCount}</div>
             </div>
             <div className="rounded-lg border p-3">
@@ -445,7 +445,7 @@ food,อาหาร`
                     <AlertDialogHeader>
                       <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        การตั้งค่าความคืบหน้าจะลบการเรียนคำศัพท์ส้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
+                        การตั้งค่าความคืบหน้าจะลบการเรียนคำศัพท์ทั้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -492,29 +492,29 @@ food,อาหาร`
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="destructive" 
+                  <Button
+                    variant="destructive"
                     disabled={isLoading}
                     className={isMobile ? 'w-full' : ''}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    ล้างคำศัพท์ส้งหมด
+                    ล้างคำศัพท์ทั้งหมด
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      การล้างคำศัพท์ส้งหมดจะลบคำศัพท์ส้งหมดในฐานข้อมูล การกระทำไม่สามารถย้อนกลับได้
+                      การล้างคำศัพท์ทั้งหมดจะลบคำศัพท์ทั้งหมดในฐานข้อมูล การกระทำไม่สามารถย้อนกลับได้
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={clearAllWords} 
+                    <AlertDialogAction
+                      onClick={clearAllWords}
                       className="bg-destructive text-destructive-foreground"
                     >
-                      ล้างคำศัพท์ส้งหมด
+                      ล้างคำศัพท์ทั้งหมด
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -548,7 +548,7 @@ food,อาหาร`
                       <SelectValue placeholder="กรองตาม" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">คกระหาร</SelectItem>
+                      <SelectItem value="all">ทุกระดับ</SelectItem>
                       <SelectItem value="a1">A1</SelectItem>
                       <SelectItem value="a2">A2</SelectItem>
                       <SelectItem value="b1">B1</SelectItem>
@@ -557,9 +557,9 @@ food,อาหาร`
                       <SelectItem value="c2">C2</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button 
-                    onClick={loadWords} 
-                    disabled={isLoading} 
+                  <Button
+                    onClick={loadWords}
+                    disabled={isLoading}
                     variant="outline"
                     className={isMobile ? 'w-full' : ''}
                   >
