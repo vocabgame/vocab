@@ -332,17 +332,12 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         setCurrentStats(updatedStats)
       }
 
-      // แสดงข้อความเมื่อตอบถูก
-      toast({
-        title: "ถูก! 🎉",
-        description: `"${word.english}" แปลว่า "${word.thai}"`,
-        duration: 800,
-      })
+      // ไม่ต้องแสดงข้อความเมื่อตอบถูก เพื่อให้โหลดคำใหม่เร็วขึ้น
 
-      // ตั้งเวลาเปลี่ยนไปคำถัดไป (0.3 วินาที)
+      // ตั้งเวลาเปลี่ยนไปคำถัดไปทันที
       const timer = setTimeout(() => {
         handleNext()
-      }, 300)
+      }, 1)
 
       setAutoAdvanceTimer(timer)
     } catch (error) {
@@ -466,14 +461,54 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       // ปรับปรุงความคืบหน้า
       setCurrentProgress(data.progress)
 
+      // ดึงข้อมูลสถิติใหม่
+      try {
+        const statsResponse = await fetch(`/api/stats?userId=${userId}`)
+        if (statsResponse.ok) {
+          const newStats = await statsResponse.json()
+          setCurrentStats(newStats)
+        }
+      } catch (statsError) {
+        console.error("Error fetching updated stats:", statsError)
+      }
+
       toast({
         title: "ปรับปรุงสำเร็จ",
         description: `ปรับปรุงความคืบหน้าของ ${levelToReset.toUpperCase()} เรียบร้อยแล้ว`,
         duration: 2000,
       })
 
-      // เรียก router.refresh() เพื่อโหลดคำใหม่
-      router.refresh()
+      // ดึงคำศัพท์ใหม่หลังจากรีเซ็ตระดับ
+      if (word) {
+        try {
+          const nextWordResponse = await fetch("/api/words/next", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              currentWordId: word._id,
+            }),
+          })
+
+          if (nextWordResponse.ok) {
+            const nextWordData = await nextWordResponse.json()
+            if (nextWordData.word) {
+              setWord(nextWordData.word)
+              setChoices(nextWordData.choices)
+              setSelectedAnswer(null)
+              setIsCorrect(null)
+              setIsRevealed(false)
+            }
+          }
+        } catch (nextWordError) {
+          console.error("Error fetching next word after reset:", nextWordError)
+        }
+      } else {
+        // ถ้าไม่มีคำปัจจุบัน ให้รีเฟรชหน้าเพื่อโหลดคำใหม่
+        router.refresh()
+      }
     } catch (error) {
       console.error("Error resetting level progress:", error)
       toast({
@@ -687,11 +722,11 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           )}
         </CardHeader>
         <CardContent>
-          <Button 
-            variant="outline" 
-            size={isMobile ? "default" : "lg"} 
-            className="w-full mb-4 sm:mb-6 text-sm sm:text-base" 
-            onClick={playPronunciation} 
+          <Button
+            variant="outline"
+            size={isMobile ? "default" : "lg"}
+            className="w-full mb-4 sm:mb-6 text-sm sm:text-base"
+            onClick={playPronunciation}
             disabled={isSpeaking}
           >
             <Volume2 className={`mr-2 h-4 w-4 ${isSpeaking ? "animate-pulse" : ""}`} />
@@ -713,7 +748,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
                 }
                 className="h-12 sm:h-16 text-sm sm:text-base break-words"
                 onClick={() => handleAnswerSelect(choice)}
-                disabled={isLoading}
+                disabled={Boolean(isLoading)}
               >
                 {choice}
               </Button>
@@ -722,9 +757,9 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         </CardContent>
         <CardFooter className="flex justify-between">
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={handleSkip} 
+            <Button
+              variant="outline"
+              onClick={handleSkip}
               disabled={isLoadingNext}
               size={isMobile ? "sm" : "default"}
               className="text-xs sm:text-sm"
@@ -732,9 +767,9 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               <SkipForward className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               ข้าม
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={handleReveal} 
+            <Button
+              variant="outline"
+              onClick={handleReveal}
               disabled={!!selectedAnswer || isRevealed || isLoading}
               size={isMobile ? "sm" : "default"}
               className="text-xs sm:text-sm"
@@ -751,7 +786,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           ) : (
             <Button
               onClick={handleNext}
-              disabled={(!selectedAnswer && !isRevealed) || isLoadingNext || (selectedAnswer && !isCorrect)}
+              disabled={Boolean((!Boolean(selectedAnswer) && !Boolean(isRevealed)) || Boolean(isLoadingNext) || (Boolean(selectedAnswer) && !Boolean(isCorrect)))}
             >
               {isLoadingNext ? "โหลด..." : "คำถัดไป"}
               <ArrowRight className="ml-2 h-4 w-4" />
