@@ -1,18 +1,38 @@
 "use client"
 
+import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { LogIn } from "lucide-react"
 import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 
-// กำหนดให้ใช้วิธีที่เรียบง่ายที่สุดในการล็อกอิน
 export function LoginButton() {
   const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast()
 
-  // ใช้การนำทางโดยตรงไปยังเส้นทางการล็อกอินของ Google
-  const handleLogin = () => {
-    setIsLoading(true)
-    // นำทางไปที่ URL การล็อกอินโดยตรง
-    window.location.href = "/api/auth/signin/google"
+  const handleLogin = async () => {
+    try {
+      setIsLoading(true)
+
+      // ใช้ redirect: true เพื่อให้ NextAuth จัดการการ redirect เอง
+      await signIn("google", {
+        callbackUrl: "/game",
+        redirect: true,
+      })
+    } catch (error) {
+      console.error("Login error:", error)
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถเข้าสู่ระบบได้ โปรดลองอีกครั้ง",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+    }
+  }
+
+  // ทางเลือกสำรองในกรณีที่ signIn() ไม่ทำงาน
+  const handleDirectLogin = () => {
+    window.location.href = "/api/auth/signin/google?callbackUrl=/game"
   }
 
   return (
