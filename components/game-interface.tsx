@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings, FastForward } from "lucide-react"
+import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -73,12 +73,22 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   const [autoAdvanceTimer, setAutoAdvanceTimer] = useState<NodeJS.Timeout | null>(null)
   const [showStageComplete, setShowStageComplete] = useState(false)
   const [showLevelComplete, setShowLevelComplete] = useState(false)
-  const [nextWordData, setNextWordData] = useState<any>(null) // เล่มสถานะเพื่อเก็บข้อมูลคำถัดไป
-
-  // เพิ่มสถานะสำหรับการเล่นแบบดึงคำศัพท์ทั้งหมดของด่าน
-  const [stageWords, setStageWords] = useState<any[]>([]); // เก็บคำศัพท์ทั้งหมดของด่าน
+  // สถานะสำหรับการเล่นเกมแบบใหม่
+  const [gameWords, setGameWords] = useState<any[]>([]); // เก็บคำศัพท์ทั้งหมดที่โหลดมา
   const [currentWordIndex, setCurrentWordIndex] = useState<number>(0); // เก็บ index ของคำปัจจุบัน
+  const [currentPage, setCurrentPage] = useState<number>(1); // หน้าปัจจุบันสำหรับ pagination
+  const [hasMoreWords, setHasMoreWords] = useState<boolean>(true); // มีคำศัพท์เพิ่มเติมให้โหลดหรือไม่
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false); // กำลังโหลดคำศัพท์เพิ่มหรือไม่
+
+  // เก็บสถานะเดิมไว้เพื่อความเข้ากันได้กับโค้ดเดิม
+  // สถานะเหล่านี้ไม่ได้ใช้ในโค้ดใหม่ แต่เก็บไว้เพื่อความเข้ากันได้กับโค้ดเดิม
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [nextWordData, setNextWordData] = useState<any>(null); // เล่มสถานะเพื่อเก็บข้อมูลคำถัดไป
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [stageWords, setStageWords] = useState<any[]>([]); // เก็บคำศัพท์ทั้งหมดของด่าน
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isStageMode, setIsStageMode] = useState<boolean>(false); // โหมดการเล่นแบบดึงคำศัพท์ทั้งหมดของด่าน
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isLoadingStage, setIsLoadingStage] = useState<boolean>(false); // สถานะการโหลดคำศัพท์ทั้งหมดของด่าน
 
   const { toast } = useToast()
@@ -114,7 +124,93 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     }
   }, [autoAdvanceTimer])
 
-  // โหลดคำศัพท์ทั้งหมดของด่าน
+  // โหลดคำศัพท์แบบใหม่โดยใช้ API /api/words/game
+  const loadGameWords = useCallback(async (page = 1, append = false) => {
+    try {
+      if (page === 1) setIsLoading(true);
+      else setIsLoadingMore(true);
+
+      // แสดงสถานะการโหลด
+      if (page === 1) {
+        toast({
+          title: "กำลังโหลดคำศัพท์",
+          description: "กรุณารอสักครู่...",
+          duration: 2000,
+        });
+      }
+
+      // เรียกใช้ API ใหม่
+      const response = await fetch(`/api/words/game?userId=${userId}&page=${page}&limit=20`);
+
+      if (!response.ok) {
+        throw new Error("Failed to load game words");
+      }
+
+      const data = await response.json();
+
+      // ถ้ามีคำศัพท์
+      if (data.words && data.words.length > 0) {
+        // ถ้าเป็นหน้าแรกหรือไม่ได้ต่อท้าย ให้แทนที่คำศัพท์ทั้งหมด
+        if (page === 1 || !append) {
+          setGameWords(data.words);
+          setCurrentWordIndex(0);
+
+          // เซ็ตคำปัจจุบันและตัวเลือก
+          setWord(data.words[0].word);
+          setChoices(data.words[0].choices);
+          setSelectedAnswer(null);
+          setIsCorrect(null);
+          setIsRevealed(false);
+        } else {
+          // ถ้าเป็นการโหลดเพิ่มเติม ให้ต่อท้ายคำศัพท์เดิม
+          setGameWords(prev => [...prev, ...data.words]);
+        }
+
+        // อัพเดตหน้าปัจจุบันและสถานะว่ามีคำศัพท์เพิ่มเติมหรือไม่
+        setCurrentPage(page);
+        setHasMoreWords(data.hasMore);
+
+        // อัพเดตความคืบหน้า
+        if (data.progress) {
+          setCurrentProgress(data.progress);
+        }
+
+        if (page === 1) {
+          toast({
+            title: "โหลดคำศัพท์สำเร็จ",
+            description: `โหลดคำศัพท์ ${data.words.length} คำสำเร็จแล้ว`,
+            duration: 2000,
+          });
+        }
+      } else {
+        // ถ้าไม่มีคำศัพท์
+        setHasMoreWords(false);
+
+        if (page === 1) {
+          toast({
+            title: "ไม่พบคำศัพท์",
+            description: "ไม่พบคำศัพท์ในระดับนี้",
+            variant: "destructive",
+            duration: 2000,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading game words:", error);
+      toast({
+        title: "ข้อผิดพลาด",
+        description: error instanceof Error ? error.message : "ไม่สามารถโหลดคำศัพท์ได้",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      if (page === 1) setIsLoading(false);
+      else setIsLoadingMore(false);
+    }
+  }, [userId, toast, setWord, setChoices, setSelectedAnswer, setIsCorrect, setIsRevealed, setCurrentProgress]);
+
+  // โหลดคำศัพท์ทั้งหมดของด่าน (เก็บไว้เพื่อความเข้ากันได้กับโค้ดเดิม)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const loadStageWords = useCallback(async () => {
     if (isLoadingStage) return;
 
@@ -342,7 +438,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         body: JSON.stringify({
           userId,
           currentWordId,
-          prefetchCount: 5, // โหลดคำศัพท์ล่วงหน้า 10 คำ
+          prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
         }),
         signal, // ใช้ signal จาก AbortController
       })
@@ -563,102 +659,62 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     try {
       setIsLoading(true)
 
-      // ถ้ามีข้อมูลคำถัดไปแล้ว ให้เปลี่ยนไปคำถัดไปทันที
-      if (nextWordData) {
-        // ทำการอัพเดตความคืบหน้าแบบ non-blocking
-        fetch("/api/progress", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId,
-            wordId: word._id,
-            correct: true,
-          }),
-        }).then(response => {
-          if (response.ok) {
-            return response.json();
-          }
-        }).then(data => {
-          if (data) {
-            // อัพเดตความคืบหน้าในส่วนของ client-side
-            setCurrentProgress(data.progress);
+      // อัพเดตความคืบหน้าแบบ non-blocking
+      fetch("/api/progress", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          wordId: word._id,
+          correct: true,
+        }),
+      }).then(response => {
+        if (response.ok) {
+          return response.json();
+        }
+      }).then(data => {
+        if (data) {
+          // อัพเดตความคืบหน้าในส่วนของ client-side
+          setCurrentProgress(data.progress);
 
-            // อัพเดตสถิติแบบ optimistic update
-            if (currentStats) {
-              const updatedStats = { ...currentStats };
-              updatedStats.completedWords += 1;
+          // อัพเดตสถิติแบบ optimistic update
+          if (currentStats) {
+            const updatedStats = { ...currentStats };
+            updatedStats.completedWords += 1;
 
-              const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
-              if (levelIndex !== -1) {
-                updatedStats.levels[levelIndex].completed += 1;
+            const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
+            if (levelIndex !== -1) {
+              updatedStats.levels[levelIndex].completed += 1;
 
-                const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-                  (s) => s.stage === currentProgress.currentStage,
-                );
-                if (stageIndex !== -1) {
-                  updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
-                }
+              const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
+                (s) => s.stage === currentProgress.currentStage,
+              );
+              if (stageIndex !== -1) {
+                updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
               }
-
-              setCurrentStats(updatedStats);
             }
-          }
-        }).catch(error => {
-          console.error("Background progress update error:", error);
-        });
 
-        // เปลี่ยนไปคำถัดไปทันที
-        handleNext();
-      } else {
-        // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ prefetch ก่อน
-        prefetchNextWord(word._id);
-
-        // อัพเดตความคืบหน้าแบบ blocking เพื่อให้แน่ใจว่าข้อมูลถูกบันทึก
-        const response = await fetch("/api/progress", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId,
-            wordId: word._id,
-            correct: true,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to update progress");
-        }
-
-        // ปรับปรุงความคืบหน้า
-        const updatedProgress = await response.json();
-        setCurrentProgress(updatedProgress.progress);
-
-        // ปรับปรุงสถิติ
-        if (currentStats) {
-          const updatedStats = { ...currentStats };
-          updatedStats.completedWords += 1;
-
-          const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
-          if (levelIndex !== -1) {
-            updatedStats.levels[levelIndex].completed += 1;
-
-            const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-              (s) => s.stage === currentProgress.currentStage,
-            );
-            if (stageIndex !== -1) {
-              updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
-            }
+            setCurrentStats(updatedStats);
           }
 
-          setCurrentStats(updatedStats);
+          // ถ้าใช้ gameWords ให้อัพเดตสถานะว่าคำนี้เรียนแล้ว
+          if (gameWords.length > 0 && currentWordIndex < gameWords.length) {
+            const updatedGameWords = [...gameWords];
+            updatedGameWords[currentWordIndex] = {
+              ...updatedGameWords[currentWordIndex],
+              completed: true
+            };
+            setGameWords(updatedGameWords);
+          }
         }
+      }).catch(error => {
+        console.error("Background progress update error:", error);
+      });
 
-        // เปลี่ยนไปคำถัดไปทันที
-        handleNext();
-      }
+      // เปลี่ยนไปคำถัดไป
+      handleNext();
     } catch (error) {
       console.error("Error updating progress:", error)
       toast({
@@ -703,6 +759,16 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         // ปรับปรุงความคืบหน้า
         const updatedProgress = await response.json()
         setCurrentProgress(updatedProgress.progress)
+
+        // ถ้าใช้ gameWords ให้อัพเดตสถานะว่าคำนี้เห็นแล้ว
+        if (gameWords.length > 0 && currentWordIndex < gameWords.length) {
+          const updatedGameWords = [...gameWords];
+          updatedGameWords[currentWordIndex] = {
+            ...updatedGameWords[currentWordIndex],
+            revealed: true
+          };
+          setGameWords(updatedGameWords);
+        }
       }
     } catch (error) {
       console.error("Error updating progress for revealed word:", error)
@@ -718,8 +784,35 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       setAutoAdvanceTimer(null)
     }
 
-    // เรียกใช้ fetchNextWord โดยตรงเพื่อโหลดคำถัดไป
-    await fetchNextWord(word._id)
+    // ใช้วิธีเดียวกับ handleNext
+    // ถ้ามีคำศัพท์ใน gameWords และยังไม่ถึงคำสุดท้าย
+    if (gameWords.length > 0 && currentWordIndex < gameWords.length - 1) {
+      // ไปยังคำถัดไปใน gameWords
+      const nextIndex = currentWordIndex + 1;
+      setCurrentWordIndex(nextIndex);
+
+      const nextWordData = gameWords[nextIndex];
+      setWord(nextWordData.word);
+      setChoices(nextWordData.choices);
+      setSelectedAnswer(null);
+      setIsCorrect(null);
+      setIsRevealed(false);
+
+      // ถ้าเหลือคำศัพท์น้อยกว่า 5 คำ ให้โหลดเพิ่ม
+      if (nextIndex >= gameWords.length - 5 && hasMoreWords) {
+        loadGameWords(currentPage + 1, true);
+      }
+
+      return;
+    }
+
+    // ถ้าไม่มีคำศัพท์ใน gameWords หรือถึงคำสุดท้ายแล้ว ให้โหลดคำศัพท์ใหม่
+    if (hasMoreWords) {
+      loadGameWords(currentPage + 1, false);
+    } else {
+      // ถ้าไม่มีคำศัพท์เหลือแล้ว ให้ใช้วิธีเดิม
+      await fetchNextWord(word._id)
+    }
   }
 
   const handleNext = async () => {
@@ -731,8 +824,34 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       setAutoAdvanceTimer(null)
     }
 
-    // เรียกใช้ fetchNextWord โดยตรงเพื่อโหลดคำถัดไป
-    await fetchNextWord(word._id)
+    // ถ้ามีคำศัพท์ใน gameWords และยังไม่ถึงคำสุดท้าย
+    if (gameWords.length > 0 && currentWordIndex < gameWords.length - 1) {
+      // ไปยังคำถัดไปใน gameWords
+      const nextIndex = currentWordIndex + 1;
+      setCurrentWordIndex(nextIndex);
+
+      const nextWordData = gameWords[nextIndex];
+      setWord(nextWordData.word);
+      setChoices(nextWordData.choices);
+      setSelectedAnswer(null);
+      setIsCorrect(null);
+      setIsRevealed(false);
+
+      // ถ้าเหลือคำศัพท์น้อยกว่า 5 คำ ให้โหลดเพิ่ม
+      if (nextIndex >= gameWords.length - 5 && hasMoreWords) {
+        loadGameWords(currentPage + 1, true);
+      }
+
+      return;
+    }
+
+    // ถ้าไม่มีคำศัพท์ใน gameWords หรือถึงคำสุดท้ายแล้ว ให้โหลดคำศัพท์ใหม่
+    if (hasMoreWords) {
+      loadGameWords(currentPage + 1, false);
+    } else {
+      // ถ้าไม่มีคำศัพท์เหลือแล้ว ให้ใช้วิธีเดิม
+      await fetchNextWord(word._id)
+    }
   }
 
   const handleTryAgain = () => {
@@ -852,7 +971,20 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     }
   }, [word])
 
-  // เล่มข้อมูลคำถัดไปเมื่อโหลดคำแรก
+  // โหลดคำศัพท์เมื่อคอมโพเนนต์โหลด
+  useEffect(() => {
+    // โหลดคำศัพท์แบบใหม่เมื่อคอมโพเนนต์โหลด
+    if (initialWord && initialWord._id) {
+      // ใช้คำศัพท์เริ่มต้นที่ส่งมาจาก server ก่อน
+      setWord(initialWord);
+      setChoices(initialChoices);
+
+      // โหลดคำศัพท์เพิ่มเติมด้วย API ใหม่
+      loadGameWords(1, false);
+    }
+  }, [initialWord, initialChoices, loadGameWords])
+
+  // เก็บไว้เพื่อความเข้ากันได้กับโค้ดเดิม
   useEffect(() => {
     if (word && word._id && !nextWordData) {
       prefetchNextWord(word._id)
