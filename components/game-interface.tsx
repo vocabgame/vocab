@@ -631,7 +631,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               <AlertDialogTrigger asChild>
                 <Button variant="outline" size={isMobile ? "sm" : "default"} className="flex items-center gap-1 text-xs sm:text-sm">
                   <RefreshCw className="h-3 w-3" />
-                  ปรับปรุง
+                  รีเซตระดับ
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -644,7 +644,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
                 <AlertDialogFooter>
                   <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
                   <AlertDialogAction onClick={resetCurrentLevel} className="bg-destructive text-destructive-foreground">
-                    ปรับปรุง
+                    รีเซตระดับ
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

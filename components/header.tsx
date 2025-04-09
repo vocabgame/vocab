@@ -24,9 +24,9 @@ export function Header({ user }: HeaderProps) {
 
   const navigationItems = [
     { href: "/game", label: "เล่นเกม", icon: null },
-    { href: "/level-select", label: "กระ", icon: <Layers className="h-4 w-4" /> },
+    { href: "/level-select", label: "เลือกระดับ", icon: <Layers className="h-4 w-4" /> },
     { href: "/progress", label: "ความคืบหน้า", icon: <BarChart3 className="h-4 w-4" /> },
-    { href: "/manage-words", label: "คำศัพท์", icon: <Database className="h-4 w-4" /> },
+    { href: "/manage-words", label: "จัดการคำศัพท์", icon: <Database className="h-4 w-4" /> },
   ]
 
   const NavigationLinks = () => (
