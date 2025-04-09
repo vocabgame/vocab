@@ -268,12 +268,19 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
 
       // ถ้าไม่มีข้อมูลคำถัดไป ให้ขอข้อมูลใหม่
       if (!data) {
+        // แสดงสถานะการโหลดคำศัพท์ทั้งหมดในด่าน
+        toast({
+          title: "กำลังโหลดคำศัพท์",
+          description: "กำลังโหลดคำศัพท์ทั้งหมดในด่าน กรุณารอสักครู่...",
+          duration: 3000,
+        });
+
         // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
         const controller = new AbortController();
         const signal = controller.signal;
 
         // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 วินาที
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพราะต้องโหลดคำศัพท์หลายคำ
 
         const response = await fetch("/api/words/next", {
           method: "POST",
@@ -285,7 +292,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           body: JSON.stringify({
             userId,
             currentWordId,
-            prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
+            prefetchCount: 100, // โหลดคำศัพท์ทั้งหมดในด่าน (100 คำ)
           }),
           signal, // ใช้ signal จาก AbortController
         })
@@ -303,11 +310,23 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       // เซ็ตข้อมูลคำถัดไปไว้ล่วงหน้า
       // ถ้ามีคำศัพท์ที่โหลดล่วงหน้ามาแล้ว ให้เก็บไว้
       if (data.nextWords && data.nextWords.length > 0) {
+        // แสดงข้อความเมื่อโหลดคำศัพท์ทั้งหมดเสร็จ
+        if (data.totalWords && data.totalWords > 50) { // ถ้ามีคำศัพท์มากกว่า 50 คำ แสดงว่าโหลดทั้งด่าน
+          toast({
+            title: "โหลดคำศัพท์สำเร็จ",
+            description: `โหลดคำศัพท์ทั้งหมด ${data.totalWords} คำสำเร็จแล้ว (ยังไม่ได้เรียน ${data.uncompletedCount} คำ)`,
+            duration: 3000,
+          });
+        }
+
         // เก็บคำศัพท์แรกจาก nextWords ไว้ใช้ต่อไป
         setNextWordData({
           word: data.nextWords[0].word,
           choices: data.nextWords[0].choices,
-          nextWords: data.nextWords.slice(1) // เก็บคำศัพท์ที่เหลือไว้
+          nextWords: data.nextWords.slice(1), // เก็บคำศัพท์ที่เหลือไว้
+          totalWords: data.totalWords,
+          uncompletedCount: data.uncompletedCount,
+          completedCount: data.completedCount
         });
       } else {
         // ถ้าไม่มีคำศัพท์ที่โหลดล่วงหน้ามา ให้ล้างข้อมูลเดิม

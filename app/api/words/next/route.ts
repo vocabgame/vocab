@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { getNextWord, getNextWords } from "@/lib/words"
+import { getNextWord, getNextWords, getAllWordsInStage } from "@/lib/words"
 import { getUserProgress } from "@/lib/user-progress"
 
 // เพิ่ม cache headers เพื่อให้การตอบสนองเร็วขึ้น
@@ -39,7 +39,16 @@ export async function POST(request: Request) {
 
       // ถ้าต้องการโหลดคำศัพท์หลายคำ
       let result;
-      if (prefetchCount > 1) {
+
+      // ถ้าต้องการโหลดคำศัพท์ทั้งหมดในด่าน (100 คำ)
+      if (prefetchCount >= 100) {
+        console.log(`Loading all words in stage for user ${userId}`);
+        // ดึงข้อมูลความคืบหน้าของผู้ใช้
+        const progress = await getUserProgress(userId);
+        // โหลดคำศัพท์ทั้งหมดในด่าน
+        result = await getAllWordsInStage(userId, progress.currentLevel, progress.currentStage);
+        console.log(`Loaded ${result.totalWords} words (${result.uncompletedCount} uncompleted, ${result.completedCount} completed)`);
+      } else if (prefetchCount > 1) {
         // โหลดคำศัพท์หลายคำพร้อมกัน
         result = await getNextWords(userId, currentWordId, prefetchCount);
       } else {

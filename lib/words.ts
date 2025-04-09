@@ -211,6 +211,79 @@ export async function getNextWord(userId: string, currentWordId: string) {
   }
 }
 
+// ดึงคำศัพท์ทั้งหมดในด่าน
+export async function getAllWordsInStage(userId: string, level: string, stage: number) {
+  try {
+    const client = await clientPromise;
+    const db = client.db();
+
+    // คำนวณช่วงคำศัพท์ในด่านนี้
+    const startIndex = (stage - 1) * WORDS_PER_STAGE;
+
+    // ดึงข้อมูลความคืบหน้าของผู้ใช้
+    const progress = await getUserProgress(userId);
+    const completedWordIds = progress.completedWords;
+
+    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการ
+    const wordsInStage = await db
+      .collection("words")
+      .find({ level })
+      .sort({ _id: 1 })
+      .skip(startIndex)
+      .limit(WORDS_PER_STAGE)
+      .toArray();
+
+    // แยกคำที่เรียนแล้วและยังไม่ได้เรียน
+    const uncompletedWords = [];
+    const completedWords = [];
+
+    for (const word of wordsInStage) {
+      const wordId = word._id.toString();
+      if (completedWordIds.includes(wordId)) {
+        completedWords.push(word);
+      } else {
+        uncompletedWords.push(word);
+      }
+    }
+
+    // สร้างตัวเลือกสำหรับแต่ละคำ
+    const wordsWithChoices = [];
+
+    // สร้างตัวเลือกสำหรับคำที่ยังไม่ได้เรียนก่อน
+    for (const word of uncompletedWords) {
+      const choices = await generateChoicesForWord(word, db);
+      wordsWithChoices.push({
+        word,
+        choices,
+        completed: false
+      });
+    }
+
+    // สร้างตัวเลือกสำหรับคำที่เรียนแล้ว
+    for (const word of completedWords) {
+      const choices = await generateChoicesForWord(word, db);
+      wordsWithChoices.push({
+        word,
+        choices,
+        completed: true
+      });
+    }
+
+    // ส่งคำศัพท์แรกกลับไปพร้อมกับคำศัพท์ที่เหลือ
+    return {
+      word: wordsWithChoices.length > 0 ? wordsWithChoices[0].word : null,
+      choices: wordsWithChoices.length > 0 ? wordsWithChoices[0].choices : [],
+      nextWords: wordsWithChoices.slice(1), // คำศัพท์ที่เหลือ
+      totalWords: wordsWithChoices.length,
+      uncompletedCount: uncompletedWords.length,
+      completedCount: completedWords.length
+    };
+  } catch (error) {
+    console.error("Error getting all words in stage:", error);
+    throw error;
+  }
+}
+
 // ดึงคำศัพท์หลายคำพร้อมกัน
 export async function getNextWords(userId: string, currentWordId: string, count: number = 3) {
   try {
