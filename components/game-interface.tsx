@@ -114,6 +114,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล
   const prefetchNextWord = async (currentWordId: string) => {
     try {
+      // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
+      const controller = new AbortController();
+      const signal = controller.signal;
+
+      // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 วินาที
+
       const response = await fetch("/api/words/next", {
         method: "POST",
         headers: {
@@ -123,7 +130,11 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           userId,
           currentWordId,
         }),
+        signal, // ใช้ signal จาก AbortController
       })
+
+      // ยกเลิกการตั้งเวลา
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error("Failed to get next word")
@@ -133,7 +144,12 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       setNextWordData(data)
       return data
     } catch (error) {
-      console.error("Error prefetching next word:", error)
+      // ถ้าเป็นการยกเลิกโดย AbortController ไม่ต้องแสดงข้อผิดพลาด
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Prefetch request was aborted due to timeout');
+      } else {
+        console.error("Error prefetching next word:", error)
+      }
       return null
     }
   }
@@ -147,16 +163,28 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
 
       // ถ้าไม่มีข้อมูลคำถัดไป ให้ขอข้อมูลใหม่
       if (!data) {
+        // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
+        const controller = new AbortController();
+        const signal = controller.signal;
+
+        // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 วินาที
+
         const response = await fetch("/api/words/next", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Cache-Control": "no-cache", // ไม่ใช้ข้อมูลจาก cache
           },
           body: JSON.stringify({
             userId,
             currentWordId,
           }),
+          signal, // ใช้ signal จาก AbortController
         })
+
+        // ยกเลิกการตั้งเวลา
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error("Failed to get next word")
@@ -167,6 +195,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
 
       // เซ็ตข้อมูลคำถัดไปไว้ล่วงหน้า
       setNextWordData(null)
+
+      // เริ่ม prefetch คำถัดไปทันทีหลังจากได้คำปัจจุบัน
+      if (data.word) {
+        setTimeout(() => {
+          prefetchNextWord(data.word._id);
+        }, 100); // รอ 100ms ก่อน prefetch เพื่อให้คำปัจจุบันโหลดเสร็จก่อน
+      }
 
       // ตรวจสอบว่าคำถัดไปไม่
       if (!data.word) {
@@ -280,66 +315,102 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     try {
       setIsLoading(true)
 
-      // เล่มข้อมูลคำถัดไปไว้ล่วงหน้า
-      if (!nextWordData) {
-        prefetchNextWord(word._id)
-      }
-
-      const response = await fetch("/api/progress", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-          wordId: word._id,
-          correct: true,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to update progress")
-      }
-
-      // ปรับปรุงความคืบหน้า
-      const updatedProgress = await response.json()
-
-      // ปรับปรุงความคืบหน้าในส่วนของ client-side
-      setCurrentProgress(updatedProgress.progress)
-
-      // ปรับปรุงสถิติ
-      if (currentStats) {
-        // ปรับปรุงจำนวนคำที่ได้ในด่าน
-        const updatedStats = { ...currentStats }
-
-        // เพิ่มจำนวนคำที่ได้
-        updatedStats.completedWords += 1
-
-        // เพิ่มจำนวนคำที่ได้ในระดับ
-        const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level)
-        if (levelIndex !== -1) {
-          updatedStats.levels[levelIndex].completed += 1
-
-          // เพิ่มจำนวนคำที่ได้ในด่าน
-          const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-            (s) => s.stage === currentProgress.currentStage,
-          )
-          if (stageIndex !== -1) {
-            updatedStats.levels[levelIndex].stages[stageIndex].completed += 1
+      // ถ้ามีข้อมูลคำถัดไปแล้ว ให้เปลี่ยนไปคำถัดไปทันที
+      if (nextWordData) {
+        // ทำการอัพเดตความคืบหน้าแบบ non-blocking
+        fetch("/api/progress", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            wordId: word._id,
+            correct: true,
+          }),
+        }).then(response => {
+          if (response.ok) {
+            return response.json();
           }
+        }).then(data => {
+          if (data) {
+            // อัพเดตความคืบหน้าในส่วนของ client-side
+            setCurrentProgress(data.progress);
+
+            // อัพเดตสถิติแบบ optimistic update
+            if (currentStats) {
+              const updatedStats = { ...currentStats };
+              updatedStats.completedWords += 1;
+
+              const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
+              if (levelIndex !== -1) {
+                updatedStats.levels[levelIndex].completed += 1;
+
+                const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
+                  (s) => s.stage === currentProgress.currentStage,
+                );
+                if (stageIndex !== -1) {
+                  updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
+                }
+              }
+
+              setCurrentStats(updatedStats);
+            }
+          }
+        }).catch(error => {
+          console.error("Background progress update error:", error);
+        });
+
+        // เปลี่ยนไปคำถัดไปทันที
+        handleNext();
+      } else {
+        // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ prefetch ก่อน
+        prefetchNextWord(word._id);
+
+        // อัพเดตความคืบหน้าแบบ blocking เพื่อให้แน่ใจว่าข้อมูลถูกบันทึก
+        const response = await fetch("/api/progress", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            wordId: word._id,
+            correct: true,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to update progress");
         }
 
-        setCurrentStats(updatedStats)
+        // ปรับปรุงความคืบหน้า
+        const updatedProgress = await response.json();
+        setCurrentProgress(updatedProgress.progress);
+
+        // ปรับปรุงสถิติ
+        if (currentStats) {
+          const updatedStats = { ...currentStats };
+          updatedStats.completedWords += 1;
+
+          const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
+          if (levelIndex !== -1) {
+            updatedStats.levels[levelIndex].completed += 1;
+
+            const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
+              (s) => s.stage === currentProgress.currentStage,
+            );
+            if (stageIndex !== -1) {
+              updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
+            }
+          }
+
+          setCurrentStats(updatedStats);
+        }
+
+        // เปลี่ยนไปคำถัดไปทันที
+        handleNext();
       }
-
-      // ไม่ต้องแสดงข้อความเมื่อตอบถูก เพื่อให้โหลดคำใหม่เร็วขึ้น
-
-      // ตั้งเวลาเปลี่ยนไปคำถัดไปทันที
-      const timer = setTimeout(() => {
-        handleNext()
-      }, 1)
-
-      setAutoAdvanceTimer(timer)
     } catch (error) {
       console.error("Error updating progress:", error)
       toast({
