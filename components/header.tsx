@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { BookOpen, BarChart3, LogOut, User, Database, Layers } from "lucide-react"
+import { BookOpen, BarChart3, LogOut, User, Database, Layers, Menu as HamburgerIcon } from "lucide-react"
+import { useState } from "react"
 
 interface HeaderProps {
   user: {
@@ -18,6 +19,9 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
   const pathname = usePathname()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+
+  const toggleMenu = () => setIsMenuOpen(!isMenuOpen)
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background">
@@ -29,7 +33,15 @@ export function Header({ user }: HeaderProps) {
           </Link>
         </div>
 
-        <nav className="flex items-center gap-4 space-x-2 sm:space-x-4">
+        {/* ปุ่มเมนูแบบ Hamburger สำหรับหน้าจอเล็ก */}
+        <div className="flex sm:hidden">
+          <Button variant="ghost" onClick={toggleMenu} className="p-2">
+            <HamburgerIcon className="h-6 w-6" />
+          </Button>
+        </div>
+
+        {/* เมนูที่แสดงในหน้าจอใหญ่ */}
+        <nav className={`flex items-center gap-4 space-x-2 sm:space-x-4 ${isMenuOpen ? "block" : "hidden"} sm:flex`}>
           <Link href="/game">
             <Button variant={pathname === "/game" ? "default" : "ghost"}>เล่นเกม</Button>
           </Link>
@@ -83,6 +95,34 @@ export function Header({ user }: HeaderProps) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </nav>
+      </div>
+
+      {/* เมนู Dropdown ในหน้าจอเล็ก */}
+      <div className={`sm:hidden ${isMenuOpen ? "block" : "hidden"}`}>
+        <nav className="flex flex-col items-start gap-2 p-4">
+          <Link href="/game">
+            <Button variant={pathname === "/game" ? "default" : "ghost"}>เล่นเกม</Button>
+          </Link>
+          <Link href="/level-select">
+            <Button variant={pathname === "/level-select" ? "default" : "ghost"} className="flex items-center">
+              <Layers className="mr-2 h-4 w-4" />
+              เลือกระดับ
+            </Button>
+          </Link>
+          <Link href="/progress">
+            <Button variant={pathname === "/progress" ? "default" : "ghost"} className="flex items-center">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              ความคืบหน้า
+            </Button>
+          </Link>
+
+          <Link href="/manage-words">
+            <Button variant={pathname === "/manage-words" ? "default" : "ghost"} className="flex items-center">
+              <Database className="mr-2 h-4 w-4" />
+              จัดการคำศัพท์
+            </Button>
+          </Link>
         </nav>
       </div>
     </header>
