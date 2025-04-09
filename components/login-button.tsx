@@ -1,6 +1,5 @@
 "use client"
 
-import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { LogIn } from "lucide-react"
 import { useState } from "react"
@@ -10,15 +9,14 @@ export function LoginButton() {
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
-  const handleLogin = async () => {
+  // เปลี่ยนวิธีการล็อกอินให้ใช้วิธีที่ตรงไปตรงมามากขึ้น
+  const handleLogin = () => {
     try {
       setIsLoading(true)
 
-      // ใช้ redirect: true เพื่อให้ NextAuth จัดการการ redirect เอง
-      await signIn("google", {
-        callbackUrl: "/game",
-        redirect: true,
-      })
+      // ใช้วิธีการล็อกอินโดยตรงแทนการใช้ signIn จาก nextauth/react
+      // เพื่อหลีกเลี่ยงปัญหาการจัดการ session ใน client side
+      window.location.href = "/api/auth/signin/google"
     } catch (error) {
       console.error("Login error:", error)
       toast({
@@ -28,11 +26,6 @@ export function LoginButton() {
       })
       setIsLoading(false)
     }
-  }
-
-  // ทางเลือกสำรองในกรณีที่ signIn() ไม่ทำงาน
-  const handleDirectLogin = () => {
-    window.location.href = "/api/auth/signin/google?callbackUrl=/game"
   }
 
   return (

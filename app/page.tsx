@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
-import { BookOpen, BarChart3, Settings } from "lucide-react"
+import { BookOpen, BarChart3, Settings, LogIn } from "lucide-react"
 import { LoginButton } from "@/components/login-button"
 import { DebugLoginButton } from "@/components/debug-login-button"
 import Link from "next/link"
@@ -10,9 +10,9 @@ import Link from "next/link"
 export default async function Home() {
   const session = await getServerSession(authOptions)
 
-  if (session) {
-    redirect("/game")
-  }
+  // ยกเลิกการ redirect อัตโนมัติเพื่อป้องกันการวนลูป
+  // แทนที่จะ redirect ให้แสดงปุ่มเข้าสู่เกมให้ผู้ใช้คลิกเอง
+  const isLoggedIn = !!session
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -23,7 +23,15 @@ export default async function Home() {
             <h1 className="text-xl font-bold">Oxford 3000 Vocabulary Game</h1>
           </div>
           <nav>
-            <LoginButton />
+            {isLoggedIn ? (
+              <Link href="/game">
+                <Button className="bg-green-600 hover:bg-green-700">
+                  เข้าสู่หน้าเกม
+                </Button>
+              </Link>
+            ) : (
+              <LoginButton />
+            )}
           </nav>
         </div>
       </header>
@@ -40,7 +48,15 @@ export default async function Home() {
                 </p>
               </div>
               <div className="space-x-4">
-                <LoginButton />
+                {isLoggedIn ? (
+                  <Link href="/game">
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      เข้าสู่หน้าเกม
+                    </Button>
+                  </Link>
+                ) : (
+                  <LoginButton />
+                )}
               </div>
             </div>
           </div>

@@ -3,9 +3,12 @@ import GoogleProvider from "next-auth/providers/google"
 import { MongoDBAdapter } from "@auth/mongodb-adapter"
 import clientPromise from "@/lib/mongodb"
 
+// เพิ่มฟังก์ชั่นเพื่อตรวจสอบว่าเราอยู่ใน development หรือ production
+const isDevelopment = process.env.NODE_ENV === "development"
+
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
-  debug: process.env.NODE_ENV === "development",
+  debug: isDevelopment,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
@@ -27,19 +30,37 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    // เพิ่ม jwt callback เพื่อจัดการ token
+    jwt: async ({ token, user }) => {
+      if (user) {
+        token.id = user.id
+        token.role = (user as any).role
+      }
+      return token
+    },
     session: async ({ session, token, user }) => {
+      console.log("Server Creating session with token:", !!token, "user:", !!user)
+
       if (session?.user) {
         // ใช้ token.sub สำหรับ JWT strategy
         if (token?.sub) {
           session.user.id = token.sub
           // เพิ่มการส่งต่อรูปภาพจาก token
           session.user.image = token.picture || session.user.image
+          // เพิ่มการส่งต่อบทบาทจาก token
+          if (token.role) {
+            session.user.role = token.role as string
+          }
         }
         // ใช้ user.id สำหรับ database strategy
         else if (user?.id) {
           session.user.id = user.id
           // เพิ่มการส่งต่อรูปภาพจาก user
           session.user.image = user.image || session.user.image
+          // เพิ่มการส่งต่อบทบาทจาก user
+          if ((user as any).role) {
+            session.user.role = (user as any).role
+          }
         }
 
         try {
@@ -136,34 +157,45 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt", // ใช้ JWT strategy
     maxAge: 30 * 24 * 60 * 60, // 30 วัน
   },
-  // เพิ่มการกำหนดค่า cookie เพื่อแก้ไขปัญหาบน production environment
+  // ปรับปรุงการกำหนดค่า cookie
   cookies: {
     sessionToken: {
-      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.session-token`,
+      name: `${!isDevelopment ? "__Secure-" : ""}next-auth.session-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production"
+        secure: !isDevelopment
       }
     },
     callbackUrl: {
-      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.callback-url`,
+      name: `${!isDevelopment ? "__Secure-" : ""}next-auth.callback-url`,
       options: {
-        httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production"
+        secure: !isDevelopment
       }
     },
     csrfToken: {
-      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.csrf-token`,
+      name: `${!isDevelopment ? "__Secure-" : ""}next-auth.csrf-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production"
+        secure: !isDevelopment
       }
+    }
+  },
+  // เพิ่มการกำหนดค่า logger เพื่อช่วยการ debug
+  logger: {
+    error(code, metadata) {
+      console.error(`Server NextAuth Error [${code}]:`, metadata)
     },
+    warn(code) {
+      console.warn(`Server NextAuth Warning [${code}]`)
+    },
+    debug(code, metadata) {
+      console.log(`Server NextAuth Debug [${code}]:`, metadata)
+    }
   }
 }
