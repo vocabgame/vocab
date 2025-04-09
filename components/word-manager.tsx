@@ -333,7 +333,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       let addedCount = 0
       let updatedCount = 0
 
-      // ส่งข้อมูลละ
+      // ส่งข้อมูลทีละชุด
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i]
 
@@ -527,7 +527,7 @@ food,อาหาร`
           <Card>
             <CardHeader>
               <CardTitle>รายการคำศัพท์</CardTitle>
-              <CardDescription>ค้นหาและคำศัพท์ในฐานข้อมูล</CardDescription>
+              <CardDescription>ค้นหาและจัดการคำศัพท์ในฐานข้อมูล</CardDescription>
             </CardHeader>
             <CardContent>
               <div className={`${isMobile ? 'flex flex-col' : 'flex flex-col md:flex-row'} gap-4 mb-4`}>
@@ -545,7 +545,7 @@ food,อาหาร`
                 <div className={`flex ${isMobile ? 'flex-col' : 'flex-row'} gap-2`}>
                   <Select value={levelFilter} onValueChange={setLevelFilter}>
                     <SelectTrigger className={isMobile ? 'w-full' : 'w-[180px]'}>
-                      <SelectValue placeholder="กรองตาม" />
+                      <SelectValue placeholder="กรองตามระดับ" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">ทุกระดับ</SelectItem>
@@ -675,7 +675,7 @@ food,อาหาร`
                   <Label htmlFor="level">ระดับ CEFR</Label>
                   <Select value={formData.level} onValueChange={(value) => setFormData({ ...formData, level: value })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="กรองตามระดับ CEFR" />
+                      <SelectValue placeholder="เลือกระดับ CEFR" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="a1">A1</SelectItem>
@@ -756,7 +756,7 @@ car,รถยนต์"
                   <Label htmlFor="bulkLevel">ระดับ CEFR</Label>
                   <Select value={bulkLevel} onValueChange={setBulkLevel}>
                     <SelectTrigger>
-                      <SelectValue placeholder="กรองตามระดับ CEFR" />
+                      <SelectValue placeholder="เลือกระดับ CEFR" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="a1">A1</SelectItem>
