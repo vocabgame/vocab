@@ -242,49 +242,88 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
   const prefetchNextWord = async (currentWordId: string) => {
     try {
+      console.log(`Prefetching next words for word ID: ${currentWordId}`);
+
       // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
       const controller = new AbortController();
       const signal = controller.signal;
 
       // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 วินาที เพิ่มเวลาเพราะต้องโหลดคำศัพท์มากขึ้น
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // เพิ่มเวลาเป็น 30 วินาทีเพราะต้องโหลดคำศัพท์มาก
 
       // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
-      const response = await fetch("/api/words/next", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache"
-        },
-        body: JSON.stringify({
-          userId,
-          currentWordId,
-          prefetchCount: 100, // โหลดคำศัพท์ทั้งหมดในด่าน (100 คำ)
-        }),
-        signal, // ใช้ signal จาก AbortController
-      })
+      console.log(`Sending request to fetch next words...`);
 
-      // ยกเลิกการตั้งเวลา
-      clearTimeout(timeoutId);
+      // ใช้ fetch แบบมี timeout และมีการจัดการข้อผิดพลาด
+      try {
+        const response = await fetch("/api/words/next", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache"
+          },
+          body: JSON.stringify({
+            userId,
+            currentWordId,
+            prefetchCount: 20, // ลดจำนวนคำศัพท์ที่โหลดลงเพื่อให้เร็วขึ้น
+          }),
+          signal, // ใช้ signal จาก AbortController
+        });
 
-      if (!response.ok) {
-        throw new Error("Failed to get next word")
+        // ยกเลิกการตั้งเวลา
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Failed to get next word: ${response.status} ${response.statusText}`);
+        }
+
+        console.log(`Response received, parsing JSON...`);
+        const data = await response.json();
+        console.log(`Successfully fetched ${data.nextWords ? data.nextWords.length : 0} next words`);
+
+        // เก็บข้อมูลคำศัพท์ที่โหลดล่วงหน้า
+        setNextWordData(data);
+        return data;
+      } catch (fetchError) {
+        // ยกเลิกการตั้งเวลาถ้ายังไม่ถูกยกเลิก
+        clearTimeout(timeoutId);
+        throw fetchError;
       }
-
-      const data = await response.json()
-
-      // เก็บข้อมูลคำศัพท์ที่โหลดล่วงหน้า
-      setNextWordData(data)
-      return data
     } catch (error) {
       // ถ้าเป็นการยกเลิกโดย AbortController ไม่ต้องแสดงข้อผิดพลาด
       if (error instanceof DOMException && error.name === 'AbortError') {
         console.log('Prefetch request was aborted due to timeout');
       } else {
-        console.error("Error prefetching next word:", error)
+        console.error("Error prefetching next word:", error);
       }
-      return null
+
+      // ลองโหลดคำศัพท์น้อยลง
+      try {
+        console.log("Retrying with fewer words...");
+        const retryResponse = await fetch("/api/words/next", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            currentWordId,
+            prefetchCount: 3, // โหลดแค่ 3 คำเพื่อให้เร็วขึ้น
+          }),
+        });
+
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          console.log(`Retry successful, fetched ${retryData.nextWords ? retryData.nextWords.length : 0} words`);
+          setNextWordData(retryData);
+          return retryData;
+        }
+      } catch (retryError) {
+        console.error("Error in retry attempt:", retryError);
+      }
+
+      return null;
     }
   }
 
