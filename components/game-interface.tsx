@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -19,7 +19,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useIsMobile } from "@/hooks/use-mobile"
 
 // จำนวนคำต่อด่าน
 const WORDS_PER_STAGE = 100
@@ -59,7 +58,6 @@ interface GameInterfaceProps {
 }
 
 export function GameInterface({ initialWord, initialChoices, userId, progress, stats }: GameInterfaceProps) {
-  const isMobile = useIsMobile()
   const [word, setWord] = useState(initialWord)
   const [choices, setChoices] = useState(initialChoices)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
@@ -73,14 +71,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   const [autoAdvanceTimer, setAutoAdvanceTimer] = useState<NodeJS.Timeout | null>(null)
   const [showStageComplete, setShowStageComplete] = useState(false)
   const [showLevelComplete, setShowLevelComplete] = useState(false)
-  const [nextWordData, setNextWordData] = useState<any>(null) // เล่มสถานะเพื่อเก็บข้อมูลคำถัดไป
-
-  // เพิ่มสถานะสำหรับการเล่นแบบดึงคำศัพท์ทั้งหมดของด่าน
-  const [stageWords, setStageWords] = useState<any[]>([]); // เก็บคำศัพท์ทั้งหมดของด่าน
-  const [currentWordIndex, setCurrentWordIndex] = useState<number>(0); // เก็บ index ของคำปัจจุบัน
-  const [isStageMode, setIsStageMode] = useState<boolean>(false); // โหมดการเล่นแบบดึงคำศัพท์ทั้งหมดของด่าน
-  const [isLoadingStage, setIsLoadingStage] = useState<boolean>(false); // สถานะการโหลดคำศัพท์ทั้งหมดของด่าน
-
+  const [nextWordData, setNextWordData] = useState<any>(null) // เพิ่มสถานะเพื่อเก็บข้อมูลคำถัดไป
   const { toast } = useToast()
   const router = useRouter()
 
@@ -93,134 +84,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     }
   }, [autoAdvanceTimer])
 
-  // โหลดคำศัพท์ทั้งหมดของด่าน
-  const loadStageWords = useCallback(async () => {
-    if (isLoadingStage) return;
-
-    try {
-      setIsLoadingStage(true);
-      toast({
-        title: "กำลังโหลดคำศัพท์ทั้งหมดของด่าน",
-        description: "กรุณารอสักครู่...",
-        duration: 2000,
-      });
-
-      const response = await fetch("/api/words/stage", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-          level: currentProgress.currentLevel,
-          stage: currentProgress.currentStage,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load stage words");
-      }
-
-      const data = await response.json();
-
-      if (data.words && data.words.length > 0) {
-        setStageWords(data.words);
-        setCurrentWordIndex(0);
-        setIsStageMode(true);
-
-        // เริ่มเล่นด้วยคำแรก
-        const firstWordData = data.words[0];
-        setWord(firstWordData.word);
-        setChoices(firstWordData.choices);
-        setSelectedAnswer(null);
-        setIsCorrect(null);
-        setIsRevealed(false);
-
-        toast({
-          title: "โหลดคำศัพท์สำเร็จ",
-          description: `โหลดคำศัพท์ทั้งหมด ${data.words.length} คำสำเร็จแล้ว`,
-          duration: 2000,
-        });
-      } else {
-        toast({
-          title: "ไม่พบคำศัพท์",
-          description: "ไม่พบคำศัพท์ในด่านนี้",
-          variant: "destructive",
-          duration: 2000,
-        });
-      }
-    } catch (error) {
-      console.error("Error loading stage words:", error);
-      toast({
-        title: "ข้อผิดพลาด",
-        description: error instanceof Error ? error.message : "ไม่สามารถโหลดคำศัพท์ได้",
-        variant: "destructive",
-        duration: 3000,
-      });
-    } finally {
-      setIsLoadingStage(false);
-    }
-  }, [userId, currentProgress.currentLevel, currentProgress.currentStage, isLoadingStage, toast]);
-
-  // ข้ามไปคำถัดไปในโหมดด่าน
-  const handleSkipWord = useCallback(() => {
-    // ถ้ามีคำศัพท์ที่โหลดมาแล้วใน nextWordData ให้ใช้คำศัพท์นั้น
-    if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
-      // ใช้คำถัดไปจาก nextWords
-      setWord(nextWordData.nextWords[0].word);
-      setChoices(nextWordData.nextWords[0].choices);
-
-      // อัพเดต nextWordData ให้เก็บคำที่เหลือ
-      setNextWordData({
-        ...nextWordData,
-        word: nextWordData.nextWords[0].word,
-        choices: nextWordData.nextWords[0].choices,
-        nextWords: nextWordData.nextWords.slice(1)
-      });
-
-      // รีเซ็ตสถานะ
-      setSelectedAnswer(null);
-      setIsCorrect(null);
-      setIsRevealed(false);
-
-      console.log("Using next word from prefetched data");
-      return;
-    }
-
-    // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
-    if (isStageMode && stageWords.length > 0) {
-      // เพิ่ม index และเปลี่ยนไปคำถัดไป
-      const nextIndex = (currentWordIndex + 1) % stageWords.length;
-      setCurrentWordIndex(nextIndex);
-
-      // เปลี่ยนไปคำถัดไป
-      const nextWord = stageWords[nextIndex];
-      setWord(nextWord.word);
-      setChoices(nextWord.choices);
-      setSelectedAnswer(null);
-      setIsCorrect(null);
-      setIsRevealed(false);
-
-      console.log(`Skipped to word ${nextIndex + 1}/${stageWords.length}`);
-      return;
-    }
-
-    console.log("No words available to skip to");
-  }, [isStageMode, stageWords, currentWordIndex, nextWordData]);
-
-  // ผ่านคำนี้ไป (ไม่บันทึกว่าเรียนแล้ว)
-  const handlePassWord = useCallback(() => {
-    // ทำเหมือนกับ handleSkipWord แต่ไม่บันทึกว่าเรียนแล้ว
-    handleSkipWord();
-  }, [handleSkipWord])
-
   const playPronunciation = () => {
     if (isSpeaking || !word || !word.english) return
 
     setIsSpeaking(true)
     const utterance = new SpeechSynthesisUtterance(word.english)
     utterance.lang = "en-US"
-    utterance.rate = 0.8 // ลดความเร็วลงเล็กน้อยเพื่อให้
+    utterance.rate = 0.8 // ลดความเร็วลงเล็กน้อยเพื่อให้ฟังชัดขึ้น
 
     utterance.onend = () => {
       setIsSpeaking(false)
@@ -229,8 +99,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     utterance.onerror = () => {
       setIsSpeaking(false)
       toast({
-        title: "ไม่สามารถเล่นได้",
-        description: "โปรดตรวจสอบว่าเบราว์เซอร์สามารถอ่านออกได้",
+        title: "ไม่สามารถเล่นเสียงได้",
+        description: "โปรดตรวจสอบว่าเบราว์เซอร์ของคุณรองรับการอ่านออกเสียง",
         variant: "destructive",
         duration: 3000,
       })
@@ -239,140 +109,30 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     window.speechSynthesis.speak(utterance)
   }
 
-  // ก์ข้อมูลคำถัดไปแต่ไม่แสดงผล (โหลดคำศัพท์หลายคำล่วงหน้า)
-  const prefetchNextWord = async (currentWordId: string, batchSize = 50) => {
+  // ฟังก์ชันสำหรับดึงข้อมูลคำถัดไปแต่ยังไม่แสดงผล
+  const prefetchNextWord = async (currentWordId: string) => {
     try {
-      // ลองดึงข้อมูลจาก cache ก่อน
-      const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
-      try {
-        const cachedData = localStorage.getItem(cacheKey);
-        if (cachedData) {
-          const parsedData = JSON.parse(cachedData);
-          if (parsedData && parsedData.nextWords && parsedData.nextWords.length > 0) {
-            console.log(`Using ${parsedData.nextWords.length} words from cache`);
-            setNextWordData(parsedData);
-            return parsedData;
-          }
-        }
-      } catch (cacheError) {
-        console.error("Error reading from cache:", cacheError);
+      const response = await fetch("/api/words/next", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          currentWordId,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to get next word")
       }
 
-      console.log(`Prefetching next words for word ID: ${currentWordId} (batch size: ${batchSize})`);
-
-      // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
-      const controller = new AbortController();
-      const signal = controller.signal;
-
-      // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพื่อให้มีเวลาโหลดคำศัพท์ 50 คำ
-
-      // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
-      console.log(`Sending request to fetch next words...`);
-
-      // ใช้ fetch แบบมี timeout และมีการจัดการข้อผิดพลาด
-      try {
-        const response = await fetch("/api/words/next", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache"
-          },
-          body: JSON.stringify({
-            userId,
-            currentWordId,
-            prefetchCount: 50, // โหลดคำศัพท์ 50 คำตามที่ต้องการ
-          }),
-          signal, // ใช้ signal จาก AbortController
-        });
-
-        // ยกเลิกการตั้งเวลา
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`Failed to get next word: ${response.status} ${response.statusText}`);
-        }
-
-        console.log(`Response received, parsing JSON...`);
-        const data = await response.json();
-        console.log(`Successfully fetched ${data.nextWords ? data.nextWords.length : 0} next words`);
-
-        // เก็บข้อมูลใน cache
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(data));
-          console.log(`Saved words to cache with key: ${cacheKey}`);
-        } catch (cacheError) {
-          console.error("Error saving to cache:", cacheError);
-        }
-
-        // เก็บข้อมูลคำศัพท์ที่โหลดล่วงหน้า
-        setNextWordData(data);
-        return data;
-      } catch (fetchError) {
-        // ยกเลิกการตั้งเวลาถ้ายังไม่ถูกยกเลิก
-        clearTimeout(timeoutId);
-        throw fetchError;
-      }
+      const data = await response.json()
+      setNextWordData(data)
+      return data
     } catch (error) {
-      // ถ้าเป็นการยกเลิกโดย AbortController ไม่ต้องแสดงข้อผิดพลาด
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.log('Prefetch request was aborted due to timeout');
-      } else {
-        console.error("Error prefetching next word:", error);
-      }
-
-      // ลองโหลดคำศัพท์น้อยลง
-      try {
-        console.log("Retrying with 10 words...");
-        const retryResponse = await fetch("/api/words/next", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId,
-            currentWordId,
-            prefetchCount: 10, // โหลดแค่ 10 คำเมื่อเกิดข้อผิดพลาด
-          }),
-        });
-
-        if (retryResponse.ok) {
-          const retryData = await retryResponse.json();
-          console.log(`Retry successful, fetched ${retryData.nextWords ? retryData.nextWords.length : 0} words`);
-          setNextWordData(retryData);
-          return retryData;
-        }
-      } catch (retryError) {
-        console.error("Error in retry attempt:", retryError);
-
-        // ลองอีกครั้งด้วยคำศัพท์เพียง 1 คำ
-        try {
-          console.log("Retrying with 1 word as last resort...");
-          const lastRetryResponse = await fetch("/api/words/next", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userId,
-              currentWordId,
-              prefetchCount: 1, // โหลดแค่ 1 คำเพื่อให้เร็วที่สุด
-            }),
-          });
-
-          if (lastRetryResponse.ok) {
-            const lastRetryData = await lastRetryResponse.json();
-            console.log(`Last retry successful, fetched ${lastRetryData.nextWords ? lastRetryData.nextWords.length : 0} words`);
-            setNextWordData(lastRetryData);
-            return lastRetryData;
-          }
-        } catch (lastRetryError) {
-          console.error("Error in last retry attempt:", lastRetryError);
-        }
-      }
-
-      return null;
+      console.error("Error prefetching next word:", error)
+      return null
     }
   }
 
@@ -380,208 +140,83 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     try {
       setIsLoadingNext(true)
 
-      // ลองดึงข้อมูลจาก cache ก่อน
-      const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
-      let data = null;
+      // ถ้ามีข้อมูลคำถัดไปที่ดึงไว้ล่วงหน้าแล้ว ให้ใช้ข้อมูลนั้นเลย
+      let data = nextWordData
 
-      try {
-        const cachedData = localStorage.getItem(cacheKey);
-        if (cachedData) {
-          const parsedData = JSON.parse(cachedData);
-          if (parsedData && parsedData.word) {
-            console.log(`Using data from cache with key: ${cacheKey}`);
-            data = parsedData;
-          }
-        }
-      } catch (cacheError) {
-        console.error("Error reading from cache:", cacheError);
-      }
-
-      // ถ้าไม่มีข้อมูลใน cache ให้ใช้ข้อมูลจาก nextWordData
-      if (!data && nextWordData) {
-        console.log("Using data from nextWordData");
-        data = nextWordData;
-      }
-
-      // ถ้าไม่มีข้อมูลคำถัดไป ให้ขอข้อมูลใหม่
+      // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ดึงข้อมูลใหม่
       if (!data) {
-        console.log("No cached data available, fetching from server...");
-        // แสดงสถานะการโหลดคำศัพท์
-        toast({
-          title: "กำลังโหลดคำศัพท์",
-          description: "กำลังโหลดคำศัพท์ กรุณารอสักครู่...",
-          duration: 3000,
-        });
+        const response = await fetch("/api/words/next", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            currentWordId,
+          }),
+        })
 
-        // ใช้ AbortController เพื่อให้สามารถยกเลิกการร้องขอได้ถ้าจำเป็น
-        const controller = new AbortController();
-        const signal = controller.signal;
-
-        // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพื่อให้มีเวลาโหลดคำศัพท์ 50 คำ
-
-        try {
-          const response = await fetch("/api/words/next", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              "Pragma": "no-cache"
-            },
-            body: JSON.stringify({
-              userId,
-              currentWordId,
-              prefetchCount: 50, // โหลดคำศัพท์ 50 คำตามที่ต้องการ
-            }),
-            signal, // ใช้ signal จาก AbortController
-          });
-
-          // ยกเลิกการตั้งเวลา
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            throw new Error(`Failed to get next word: ${response.status} ${response.statusText}`);
-          }
-
-          data = await response.json();
-
-          // เก็บข้อมูลใน cache
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(data));
-            console.log(`Saved data to cache with key: ${cacheKey}`);
-          } catch (cacheError) {
-            console.error("Error saving to cache:", cacheError);
-          }
-        } catch (fetchError) {
-          // ยกเลิกการตั้งเวลาถ้ายังไม่ถูกยกเลิก
-          clearTimeout(timeoutId);
-
-          // ลองโหลดคำศัพท์น้อยลง
-          console.log("Retrying with 10 words...");
-          const retryResponse = await fetch("/api/words/next", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userId,
-              currentWordId,
-              prefetchCount: 10, // โหลดแค่ 10 คำเมื่อเกิดข้อผิดพลาด
-            }),
-          });
-
-          if (retryResponse.ok) {
-            data = await retryResponse.json();
-            console.log("Retry with 10 words successful");
-          } else {
-            // ลองอีกครั้งด้วยคำศัพท์เพียง 1 คำ
-            console.log("Retrying with 1 word as last resort...");
-            const lastRetryResponse = await fetch("/api/words/next", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                userId,
-                currentWordId,
-                prefetchCount: 1, // โหลดแค่ 1 คำเพื่อให้เร็วที่สุด
-              }),
-            });
-
-            if (lastRetryResponse.ok) {
-              data = await lastRetryResponse.json();
-              console.log("Last retry with 1 word successful");
-            } else {
-              throw new Error("Failed to get next word even with retry");
-            }
-          }
+        if (!response.ok) {
+          throw new Error("Failed to get next word")
         }
+
+        data = await response.json()
       }
 
-      // เซ็ตข้อมูลคำถัดไปไว้ล่วงหน้า
-      // ถ้ามีคำศัพท์ที่โหลดล่วงหน้ามาแล้ว ให้เก็บไว้
-      if (data.nextWords && data.nextWords.length > 0) {
-        // แสดงข้อความเมื่อโหลดคำศัพท์ทั้งหมดเสร็จ
-        if (data.totalWords && data.totalWords > 50) { // ถ้ามีคำศัพท์มากกว่า 50 คำ แสดงว่าโหลดทั้งด่าน
-          toast({
-            title: "โหลดคำศัพท์สำเร็จ",
-            description: `โหลดคำศัพท์ทั้งหมด ${data.totalWords} คำสำเร็จแล้ว (ยังไม่ได้เรียน ${data.uncompletedCount} คำ)`,
-            duration: 3000,
-          });
-        }
+      // รีเซ็ตข้อมูลคำถัดไปที่ดึงไว้ล่วงหน้า
+      setNextWordData(null)
 
-        // เก็บคำศัพท์แรกจาก nextWords ไว้ใช้ต่อไป
-        setNextWordData({
-          word: data.nextWords[0].word,
-          choices: data.nextWords[0].choices,
-          nextWords: data.nextWords.slice(1), // เก็บคำศัพท์ที่เหลือไว้
-          totalWords: data.totalWords,
-          uncompletedCount: data.uncompletedCount,
-          completedCount: data.completedCount
-        });
-      } else {
-        // ถ้าไม่มีคำศัพท์ที่โหลดล่วงหน้ามา ให้ล้างข้อมูลเดิม
-        setNextWordData(null);
-
-        // เริ่ม prefetch คำถัดไปทันทีหลังจากได้คำปัจจุบัน
-        if (data.word) {
-          setTimeout(() => {
-            prefetchNextWord(data.word._id);
-          }, 100); // รอ 100ms ก่อน prefetch เพื่อให้คำปัจจุบันโหลดเสร็จก่อน
-        }
-      }
-
-      // ตรวจสอบว่าคำถัดไปไม่
+      // ตรวจสอบว่ามีคำถัดไปหรือไม่
       if (!data.word) {
-        // ตรวจสอบว่าจบด่าน
+        // ตรวจสอบว่าจบระดับหรือจบด่าน
         if (data.levelComplete) {
           setShowLevelComplete(true)
           toast({
-            title: `ด้วย! ผ่าน ${currentProgress.currentLevel.toUpperCase()} แล้ว!`,
-            description: "ได้รับคำศัพท์ครบในด่านนี้แล้ว ไปเล่นด่านถัดไป",
+            title: `ยินดีด้วย! คุณผ่านระดับ ${currentProgress.currentLevel.toUpperCase()} แล้ว!`,
+            description: "คุณได้เรียนรู้คำศัพท์ทั้งหมดในระดับนี้แล้ว กำลังเลื่อนไประดับถัดไป",
             duration: 3000,
           })
         } else if (data.stageComplete) {
           setShowStageComplete(true)
           toast({
-            title: `ด้วย! ผ่านด่าน ${currentProgress.currentStage} ของ ${currentProgress.currentLevel.toUpperCase()} แล้ว!`,
-            description: "ไปเล่นด่านถัดไป",
+            title: `ยินดีด้วย! คุณผ่านด่าน ${currentProgress.currentStage} ของระดับ ${currentProgress.currentLevel.toUpperCase()} แล้ว!`,
+            description: "กำลังเลื่อนไปด่านถัดไป",
             duration: 3000,
           })
         } else {
           toast({
-            title: "ด้วย!",
-            description: "ได้รับคำศัพท์ครบแล้ว",
+            title: "ยินดีด้วย!",
+            description: "คุณได้เรียนรู้คำศัพท์ทั้งหมดแล้ว",
             duration: 3000,
           })
         }
 
-        // เรียก router.refresh() เพื่อโหลดหน้าใหม่ (ถ้าต้องการ)
+        // รีเฟรชหน้าเพื่อโหลดระดับถัดไป (ถ้ามี)
         setTimeout(() => {
           router.refresh()
         }, 3000)
         return false
       }
 
-      // ปเดตคำศัพท์และพร้อม
+      // อัปเดตคำศัพท์และตัวเลือกพร้อมกัน
       setWord(data.word)
       setChoices(data.choices)
       setSelectedAnswer(null)
       setIsCorrect(null)
       setIsRevealed(false)
 
-      // ถ้ามีการเปลี่ยนแปลง ปรับปรุงความคืบหน้า
+      // อัพเดตความคืบหน้าถ้ามีการเปลี่ยนแปลง
       if (data.progress) {
         setCurrentProgress(data.progress)
 
-        // ถ้ามีการเปลี่ยนแปลงในด่าน ปรับปรุงสถิติ
+        // อัพเดตสถิติถ้ามีการเปลี่ยนแปลงระดับหรือด่าน
         if (
           data.progress.currentLevel !== currentProgress.currentLevel ||
           data.progress.currentStage !== currentProgress.currentStage ||
           data.levelComplete ||
           data.stageComplete
         ) {
-          // ใหม่
+          // ดึงสถิติใหม่
           try {
             const statsResponse = await fetch(`/api/stats?userId=${userId}`)
             if (statsResponse.ok) {
@@ -594,7 +229,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         }
       }
 
-      // เล่มข้อมูลคำถัดไปไว้ล่วงหน้า
+      // เริ่มดึงข้อมูลคำถัดไปไว้ล่วงหน้า
       if (data.word) {
         prefetchNextWord(data.word._id)
       }
@@ -603,7 +238,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     } catch (error) {
       console.error("Error getting next word:", error)
       toast({
-        title: "ข้อผิดพลาด",
+        title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถโหลดคำถัดไปได้ โปรดรีเฟรชหน้านี้",
         variant: "destructive",
         duration: 3000,
@@ -625,12 +260,12 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     if (!correct) {
       toast({
         title: "ไม่ถูกต้อง",
-        description: "ลองตอบใหม่ครั้ง",
+        description: "ลองตอบใหม่อีกครั้ง",
         variant: "destructive",
         duration: 800,
       })
 
-      // รอ 0.8 วินาทีแล้วเซ็ตคำตอบเพื่อให้ตอบใหม่ได้
+      // รอสักครู่แล้วรีเซ็ตคำตอบเพื่อให้ตอบใหม่ได้
       setTimeout(() => {
         setSelectedAnswer(null)
         setIsCorrect(null)
@@ -639,12 +274,16 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       return
     }
 
-    // ถ้าตอบถูก ให้ปรับปรุงความคืบหน้า
+    // ถ้าตอบถูก ให้บันทึกความคืบหน้า
     try {
       setIsLoading(true)
 
-      // ทำการอัพเดตความคืบหน้าแบบ non-blocking
-      fetch("/api/progress", {
+      // เริ่มดึงข้อมูลคำถัดไปไว้ล่วงหน้าทันที
+      if (!nextWordData) {
+        prefetchNextWord(word._id)
+      }
+
+      const response = await fetch("/api/progress", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -654,147 +293,61 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           wordId: word._id,
           correct: true,
         }),
-      }).then(response => {
-        if (response.ok) {
-          return response.json();
-        }
-      }).then(data => {
-        if (data) {
-          // อัพเดตความคืบหน้าในส่วนของ client-side
-          setCurrentProgress(data.progress);
+      })
 
-          // อัพเดตสถิติแบบ optimistic update
-          if (currentStats) {
-            const updatedStats = { ...currentStats };
-            updatedStats.completedWords += 1;
-
-            const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
-            if (levelIndex !== -1) {
-              updatedStats.levels[levelIndex].completed += 1;
-
-              const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-                (s) => s.stage === currentProgress.currentStage,
-              );
-              if (stageIndex !== -1) {
-                updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
-              }
-            }
-
-            setCurrentStats(updatedStats);
-          }
-        }
-      }).catch(error => {
-        console.error("Background progress update error:", error);
-      });
-
-      // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
-      if (isStageMode && stageWords.length > 0) {
-        console.log("Using words from stage mode");
-        // เปลี่ยนไปคำถัดไปโดยใช้ handleSkipWord
-        handleSkipWord();
-        setIsLoading(false);
-        return;
+      if (!response.ok) {
+        throw new Error("Failed to update progress")
       }
-      // ถ้ามีข้อมูลคำถัดไปแล้ว ให้เปลี่ยนไปคำถัดไปทันที
-      else if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
-        console.log("Using prefetched next word");
-        // เปลี่ยนไปคำถัดไปทันที
-        handleSkipWord();
-        setIsLoading(false);
-        return;
-      } else {
-        // ถ้ายังไม่มีข้อมูลคำถัดไป ให้ลองดึงจาก cache ก่อน
-        console.log("No prefetched words, checking cache...");
 
-        // ลองดึงข้อมูลจาก cache
-        const cacheKey = `vocab_cache_${userId}_${currentProgress.currentLevel}_${currentProgress.currentStage}`;
-        let cachedData = null;
+      // อัพเดตความคืบหน้า
+      const updatedProgress = await response.json()
 
-        try {
-          const cachedString = localStorage.getItem(cacheKey);
-          if (cachedString) {
-            cachedData = JSON.parse(cachedString);
-            if (cachedData && cachedData.word) {
-              console.log(`Using cached data for next word`);
-              // เปลี่ยนไปคำถัดไปทันทีโดยใช้ข้อมูลจาก cache
-              setNextWordData(cachedData);
-              handleNext();
-              return;
-            }
-          }
-        } catch (cacheError) {
-          console.error("Error reading from cache:", cacheError);
-        }
+      // อัพเดตความคืบหน้าในส่วนของ client-side
+      setCurrentProgress(updatedProgress.progress)
 
-        // ถ้าไม่มีข้อมูลใน cache ให้ prefetch คำถัดไป
-        console.log("No cached data, fetching new word");
-        prefetchNextWord(word._id);
+      // อัพเดตสถิติด้วย
+      if (currentStats) {
+        // อัพเดตจำนวนคำที่เรียนแล้วในระดับปัจจุบัน
+        const updatedStats = { ...currentStats }
 
-        // อัพเดตความคืบหน้าแบบ blocking เพื่อให้แน่ใจว่าข้อมูลถูกบันทึก
-        try {
-          const controller = new AbortController();
-          const signal = controller.signal;
-          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 วินาทีเพื่อให้มีเวลาอัพเดตความคืบหน้า
+        // เพิ่มจำนวนคำที่เรียนแล้วทั้งหมด
+        updatedStats.completedWords += 1
 
-          const response = await fetch("/api/progress", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userId,
-              wordId: word._id,
-              correct: true,
-            }),
-            signal,
-          });
+        // เพิ่มจำนวนคำที่เรียนแล้วในระดับปัจจุบัน
+        const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level)
+        if (levelIndex !== -1) {
+          updatedStats.levels[levelIndex].completed += 1
 
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            throw new Error("Failed to update progress");
-          }
-
-          // ปรับปรุงความคืบหน้า
-          const updatedProgress = await response.json();
-          setCurrentProgress(updatedProgress.progress);
-
-          // ปรับปรุงสถิติ
-          if (currentStats) {
-            const updatedStats = { ...currentStats };
-            updatedStats.completedWords += 1;
-
-            const levelIndex = updatedStats.levels.findIndex((l) => l.level === word.level);
-            if (levelIndex !== -1) {
-              updatedStats.levels[levelIndex].completed += 1;
-
-              const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
-                (s) => s.stage === currentProgress.currentStage,
-              );
-              if (stageIndex !== -1) {
-                updatedStats.levels[levelIndex].stages[stageIndex].completed += 1;
-              }
-            }
-
-            setCurrentStats(updatedStats);
-          }
-        } catch (progressError) {
-          if (progressError instanceof DOMException && progressError.name === 'AbortError') {
-            console.log('Progress update was aborted due to timeout');
-          } else {
-            console.error("Error updating progress:", progressError);
-            throw progressError;
+          // เพิ่มจำนวนคำที่เรียนแล้วในด่านปัจจุบัน
+          const stageIndex = updatedStats.levels[levelIndex].stages.findIndex(
+            (s) => s.stage === currentProgress.currentStage,
+          )
+          if (stageIndex !== -1) {
+            updatedStats.levels[levelIndex].stages[stageIndex].completed += 1
           }
         }
 
-        // เปลี่ยนไปคำถัดไปทันที
-        handleNext();
+        setCurrentStats(updatedStats)
       }
+
+      // แสดงข้อความเมื่อตอบถูก
+      toast({
+        title: "ถูกต้อง! 🎉",
+        description: `"${word.english}" แปลว่า "${word.thai}"`,
+        duration: 800,
+      })
+
+      // ตั้งเวลาเปลี่ยนไปคำถัดไปอัตโนมัติหลังจากตอบถูก (0.3 วินาที)
+      const timer = setTimeout(() => {
+        handleNext()
+      }, 300)
+
+      setAutoAdvanceTimer(timer)
     } catch (error) {
       console.error("Error updating progress:", error)
       toast({
-        title: "ข้อผิดพลาด",
-        description: "ไม่สามารถปรับปรุงความคืบหน้าได้ โปรดลองอีกครั้ง",
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถบันทึกความคืบหน้าได้ โปรดลองอีกครั้ง",
         variant: "destructive",
         duration: 3000,
       })
@@ -815,7 +368,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       duration: 800,
     })
 
-    // ว่าได้เห็นคำแล้ว แต่ไม่นับว่าตอบถูก
+    // บันทึกว่าได้เห็นคำนี้แล้ว แต่ไม่นับว่าตอบถูก
     try {
       const response = await fetch("/api/progress", {
         method: "POST",
@@ -831,7 +384,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       })
 
       if (response.ok) {
-        // ปรับปรุงความคืบหน้า
+        // อัพเดตความคืบหน้า
         const updatedProgress = await response.json()
         setCurrentProgress(updatedProgress.progress)
       }
@@ -843,65 +396,41 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
   const handleSkip = async () => {
     if (!word || isLoadingNext) return
 
-    // ยกเลิก timer ถ้ามีอยู่
+    // ยกเลิก timer ที่อาจกำลังทำงานอยู่
     if (autoAdvanceTimer) {
       clearTimeout(autoAdvanceTimer)
       setAutoAdvanceTimer(null)
     }
 
-    // ถ้ามีคำศัพท์ที่โหลดมาแล้ว ให้ใช้ handleSkipWord แทน
-    if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
-      handleSkipWord();
-      return;
-    }
-
-    // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
-    if (isStageMode && stageWords.length > 0) {
-      handleSkipWord();
-      return;
-    }
-
-    // ถ้าไม่มีคำศัพท์ที่โหลดมาแล้ว ให้เรียกใช้ fetchNextWord โดยตรง
+    // เรียกใช้ fetchNextWord โดยตรงเพื่อโหลดคำถัดไป
     await fetchNextWord(word._id)
   }
 
   const handleNext = async () => {
     if (!word || isLoadingNext) return
 
-    // ยกเลิก timer ถ้ามีอยู่
+    // ยกเลิก timer ที่อาจกำลังทำงานอยู่
     if (autoAdvanceTimer) {
       clearTimeout(autoAdvanceTimer)
       setAutoAdvanceTimer(null)
     }
 
-    // ถ้ามีคำศัพท์ที่โหลดมาแล้ว ให้ใช้ handleSkipWord แทน
-    if (nextWordData && nextWordData.nextWords && nextWordData.nextWords.length > 0) {
-      handleSkipWord();
-      return;
-    }
-
-    // ถ้าอยู่ในโหมดใช้คำศัพท์ที่โหลดมาแล้ว
-    if (isStageMode && stageWords.length > 0) {
-      handleSkipWord();
-      return;
-    }
-
-    // ถ้าไม่มีคำศัพท์ที่โหลดมาแล้ว ให้เรียกใช้ fetchNextWord โดยตรง
+    // เรียกใช้ fetchNextWord โดยตรงเพื่อโหลดคำถัดไป
     await fetchNextWord(word._id)
   }
 
   const handleTryAgain = () => {
-    // เซ็ตคำตอบเพื่อให้ตอบใหม่ได้
+    // รีเซ็ตคำตอบเพื่อให้ตอบใหม่ได้
     setSelectedAnswer(null)
     setIsCorrect(null)
   }
 
-  // ปรับปรุงความคืบหน้าของระดับ
+  // รีเซตความคืบหน้าของระดับปัจจุบัน
   const resetCurrentLevel = async () => {
     try {
       setIsLoading(true)
 
-      // ตรวจสอบว่า word และ level ไม่
+      // ตรวจสอบว่ามี word และ level หรือไม่
       const levelToReset = word?.level || currentProgress.currentLevel
 
       console.log("Resetting level:", levelToReset)
@@ -932,62 +461,22 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         throw new Error(data.error || "Failed to reset level progress")
       }
 
-      // ปรับปรุงความคืบหน้า
+      // อัพเดตความคืบหน้า
       setCurrentProgress(data.progress)
 
-      // ดึงข้อมูลสถิติใหม่
-      try {
-        const statsResponse = await fetch(`/api/stats?userId=${userId}`)
-        if (statsResponse.ok) {
-          const newStats = await statsResponse.json()
-          setCurrentStats(newStats)
-        }
-      } catch (statsError) {
-        console.error("Error fetching updated stats:", statsError)
-      }
-
       toast({
-        title: "ปรับปรุงสำเร็จ",
-        description: `ปรับปรุงความคืบหน้าของ ${levelToReset.toUpperCase()} เรียบร้อยแล้ว`,
+        title: "รีเซตระดับสำเร็จ",
+        description: `รีเซตความคืบหน้าของระดับ ${levelToReset.toUpperCase()} เรียบร้อยแล้ว`,
         duration: 2000,
       })
 
-      // ดึงคำศัพท์ใหม่หลังจากรีเซ็ตระดับ
-      if (word) {
-        try {
-          const nextWordResponse = await fetch("/api/words/next", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userId,
-              currentWordId: word._id,
-            }),
-          })
-
-          if (nextWordResponse.ok) {
-            const nextWordData = await nextWordResponse.json()
-            if (nextWordData.word) {
-              setWord(nextWordData.word)
-              setChoices(nextWordData.choices)
-              setSelectedAnswer(null)
-              setIsCorrect(null)
-              setIsRevealed(false)
-            }
-          }
-        } catch (nextWordError) {
-          console.error("Error fetching next word after reset:", nextWordError)
-        }
-      } else {
-        // ถ้าไม่มีคำปัจจุบัน ให้รีเฟรชหน้าเพื่อโหลดคำใหม่
-        router.refresh()
-      }
+      // รีเฟรชหน้าเพื่อโหลดคำใหม่
+      router.refresh()
     } catch (error) {
       console.error("Error resetting level progress:", error)
       toast({
-        title: "ข้อผิดพลาด",
-        description: error instanceof Error ? error.message : "ไม่สามารถปรับปรุงความคืบหน้าของระดับได้ โปรดลองอีกครั้ง",
+        title: "เกิดข้อผิดพลาด",
+        description: error instanceof Error ? error.message : "ไม่สามารถรีเซตความคืบหน้าของระดับได้ โปรดลองอีกครั้ง",
         variant: "destructive",
         duration: 3000,
       })
@@ -996,7 +485,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     }
   }
 
-  // เล่นเสียงเมื่อคำเปลี่ยน
+  // เล่นเสียงอัตโนมัติเมื่อคำเปลี่ยน
   useEffect(() => {
     if (word && word.english) {
       const timer = setTimeout(() => {
@@ -1007,14 +496,14 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     }
   }, [word])
 
-  // เล่มข้อมูลคำถัดไปเมื่อโหลดคำแรก
+  // เริ่มดึงข้อมูลคำถัดไปเมื่อโหลดคำแรก
   useEffect(() => {
     if (word && word._id && !nextWordData) {
       prefetchNextWord(word._id)
     }
   }, [word])
 
-  // ตรวจสอบว่าคำให้เล่นไม่
+  // ตรวจสอบว่ามีคำให้เล่นหรือไม่
   if (!word || !word._id) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -1023,14 +512,14 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             <CardTitle className="text-center">ไม่พบคำศัพท์</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center text-muted-foreground">ได้รับคำศัพท์ครบในระดับนี้แล้ว ไม่มีคำศัพท์ในฐานข้อมูล</p>
+            <p className="text-center text-muted-foreground">คุณได้เรียนรู้คำศัพท์ทั้งหมดในระดับนี้แล้ว หรือยังไม่มีคำศัพท์ในฐานข้อมูล</p>
           </CardContent>
           <CardFooter className="flex justify-center gap-4">
             <Link href="/level-select">
               <Button>เลือกระดับและด่าน</Button>
             </Link>
             <Link href="/manage-words">
-              <Button variant="outline">คำศัพท์</Button>
+              <Button variant="outline">จัดการคำศัพท์</Button>
             </Link>
           </CardFooter>
         </Card>
@@ -1038,7 +527,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     )
   }
 
-  // ถ้าแสดงหน้าจบด่าน จบ
+  // ถ้ามีการแสดงหน้าจบด่านหรือจบระดับ
   if (showStageComplete) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -1048,11 +537,12 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               <Trophy className="h-16 w-16 text-yellow-500" />
             </div>
             <CardTitle className="text-center text-2xl">
-              ด้วย! ผ่านด่าน {currentProgress.currentStage - 1} ของ {currentProgress.currentLevel.toUpperCase()} แล้ว!
+              ยินดีด้วย! คุณผ่านด่าน {currentProgress.currentStage - 1} ของระดับ {currentProgress.currentLevel.toUpperCase()}{" "}
+              แล้ว!
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center text-muted-foreground mb-6">ได้รับคำศัพท์ครบในด่านนี้แล้ว ไปเล่นด่านถัดไป</p>
+            <p className="text-center text-muted-foreground mb-6">คุณได้เรียนรู้คำศัพท์ทั้งหมดในด่านนี้แล้ว กำลังเลื่อนไปด่านถัดไป</p>
             <div className="flex justify-center gap-4">
               <Button
                 onClick={() => {
@@ -1080,10 +570,10 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             <div className="flex justify-center mb-4">
               <Trophy className="h-16 w-16 text-yellow-500" />
             </div>
-            <CardTitle className="text-center text-2xl">ด้วย! ผ่าน {word.level.toUpperCase()} แล้ว!</CardTitle>
+            <CardTitle className="text-center text-2xl">ยินดีด้วย! คุณผ่านระดับ {word.level.toUpperCase()} แล้ว!</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center text-muted-foreground mb-6">ได้รับคำศัพท์ครบในระดับนี้แล้ว ไปเล่นด่านถัดไป</p>
+            <p className="text-center text-muted-foreground mb-6">คุณได้เรียนรู้คำศัพท์ทั้งหมดในระดับนี้แล้ว กำลังเลื่อนไประดับถัดไป</p>
             <div className="flex justify-center gap-4">
               <Button
                 onClick={() => {
@@ -1091,7 +581,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
                   router.refresh()
                 }}
               >
-                ไปด่านถัดไป
+                ไประดับถัดไป
               </Button>
               <Link href="/level-select">
                 <Button variant="outline">เลือกระดับและด่าน</Button>
@@ -1105,49 +595,49 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
 
   const levelLabel = word.level.toUpperCase()
 
-  // หาข้อมูลของระดับ
+  // หาข้อมูลสถิติของระดับปัจจุบัน
   const currentLevelStats = currentStats?.levels?.find((l) => l.level === word.level)
 
-  // หาข้อมูลของด่าน
+  // หาข้อมูลสถิติของด่านปัจจุบัน
   const currentStageStats = currentLevelStats?.stages?.find((s) => s.stage === currentProgress.currentStage)
 
-  // คำนวณความคืบหน้าของด่าน
+  // คำนวณความคืบหน้าของด่านปัจจุบัน
   const stageProgress = currentStageStats ? (currentStageStats.completed / currentStageStats.total) * 100 : 0
 
-  // คำนวณความคืบหน้าของระดับ
+  // คำนวณความคืบหน้าของระดับปัจจุบัน
   const levelProgress = currentLevelStats ? (currentLevelStats.completed / currentLevelStats.total) * 100 : 0
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]">
-      <div className="w-full max-w-md mb-4 sm:mb-8 px-4">
-        <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
+      <div className="w-full max-w-md mb-8 px-4">
+        <div className="flex justify-between items-center mb-2">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs sm:text-sm font-medium text-primary">
-              {levelLabel}
+            <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-2.5 py-0.5 text-sm font-medium text-primary">
+              ระดับ {levelLabel}
             </span>
-            <span className="inline-flex items-center justify-center rounded-full bg-secondary/10 px-2 py-0.5 text-xs sm:text-sm font-medium text-secondary">
+            <span className="inline-flex items-center justify-center rounded-full bg-secondary/10 px-2.5 py-0.5 text-sm font-medium text-secondary">
               ด่าน {currentProgress.currentStage}
             </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <Link href="/level-select">
-              <Button variant="outline" size={isMobile ? "sm" : "default"} className="flex items-center gap-1 text-xs sm:text-sm">
+              <Button variant="outline" size="sm" className="flex items-center gap-1">
                 <Settings className="h-3 w-3" />
                 เลือกระดับ
               </Button>
             </Link>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size={isMobile ? "sm" : "default"} className="flex items-center gap-1 text-xs sm:text-sm">
+                <Button variant="outline" size="sm" className="flex items-center gap-1">
                   <RefreshCw className="h-3 w-3" />
                   รีเซตระดับ
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>แน่ใจหรือไม่?</AlertDialogTitle>
+                  <AlertDialogTitle>คุณแน่ใจหรือไม่?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    การปรับปรุงจะลบคำศัพท์ที่ได้ในระดับ {levelLabel} และเริ่มใหม่
+                    การรีเซตระดับจะลบประวัติการเรียนรู้คำศัพท์ทั้งหมดในระดับ {levelLabel} และเริ่มต้นใหม่
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -1169,45 +659,33 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               {currentStageStats?.completed || 0} / {currentStageStats?.total || WORDS_PER_STAGE} คำ
             </span>
           </div>
-          <Progress value={stageProgress} className="h-1.5 sm:h-2" />
+          <Progress value={stageProgress} className="h-2" />
         </div>
 
         {/* ความคืบหน้าของระดับ */}
         <div>
           <div className="flex justify-between text-xs">
-            <span>{levelLabel}</span>
+            <span>ระดับ {levelLabel}</span>
             <span>
               {currentLevelStats?.completed || 0} / {currentLevelStats?.total || 0} คำ
             </span>
           </div>
-          <Progress value={levelProgress} className="h-1 sm:h-1.5" />
+          <Progress value={levelProgress} className="h-1" />
         </div>
       </div>
 
       <Card className="w-full max-w-md mx-4">
-        <CardHeader className="space-y-2 sm:space-y-4">
-          <CardTitle className="text-center text-xl sm:text-2xl md:text-3xl break-words">
-            {word.english}
-          </CardTitle>
-          {isRevealed && (
-            <div className="text-center text-green-600 font-medium text-sm sm:text-base">
-              {word.thai}
-            </div>
-          )}
+        <CardHeader>
+          <CardTitle className="text-center text-3xl">{word.english}</CardTitle>
+          {isRevealed && <div className="text-center text-green-600 font-medium mt-2">{word.thai}</div>}
         </CardHeader>
         <CardContent>
-          <Button
-            variant="outline"
-            size={isMobile ? "default" : "lg"}
-            className="w-full mb-4 sm:mb-6 text-sm sm:text-base"
-            onClick={playPronunciation}
-            disabled={isSpeaking}
-          >
+          <Button variant="outline" size="lg" className="w-full mb-6" onClick={playPronunciation} disabled={isSpeaking}>
             <Volume2 className={`mr-2 h-4 w-4 ${isSpeaking ? "animate-pulse" : ""}`} />
-            {isSpeaking ? "เล่น..." : "การออกเสียง"}
+            {isSpeaking ? "กำลังเล่นเสียง..." : "ฟังการออกเสียง"}
           </Button>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 gap-4">
             {choices.map((choice, index) => (
               <Button
                 key={index}
@@ -1220,9 +698,9 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
                       ? "default"
                       : "outline"
                 }
-                className="h-12 sm:h-16 text-sm sm:text-base break-words"
+                className="h-16 text-lg"
                 onClick={() => handleAnswerSelect(choice)}
-                disabled={Boolean(isLoading)}
+                disabled={isLoading}
               >
                 {choice}
               </Button>
@@ -1231,24 +709,12 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         </CardContent>
         <CardFooter className="flex justify-between">
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSkip}
-              disabled={isLoadingNext}
-              size={isMobile ? "sm" : "default"}
-              className="text-xs sm:text-sm"
-            >
-              <SkipForward className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+            <Button variant="outline" onClick={handleSkip} disabled={isLoadingNext}>
+              <SkipForward className="mr-2 h-4 w-4" />
               ข้าม
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleReveal}
-              disabled={!!selectedAnswer || isRevealed || isLoading}
-              size={isMobile ? "sm" : "default"}
-              className="text-xs sm:text-sm"
-            >
-              <Eye className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+            <Button variant="outline" onClick={handleReveal} disabled={!!selectedAnswer || isRevealed || isLoading}>
+              <Eye className="mr-2 h-4 w-4" />
               เฉลย
             </Button>
           </div>
@@ -1260,9 +726,9 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           ) : (
             <Button
               onClick={handleNext}
-              disabled={Boolean((!Boolean(selectedAnswer) && !Boolean(isRevealed)) || Boolean(isLoadingNext) || (Boolean(selectedAnswer) && !Boolean(isCorrect)))}
+              disabled={(!selectedAnswer && !isRevealed) || isLoadingNext || (selectedAnswer && !isCorrect)}
             >
-              {isLoadingNext ? "โหลด..." : "คำถัดไป"}
+              {isLoadingNext ? "กำลังโหลด..." : "คำถัดไป"}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           )}
@@ -1271,4 +737,3 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
     </div>
   )
 }
-
