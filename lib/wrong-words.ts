@@ -74,8 +74,8 @@ export async function getWrongWords(userId: string) {
 
   return await db.collection("wrong_words")
     .find({
-      userId,
-      mastered: false
+      userId
+      // Removed mastered: false filter to allow continuous review of all words
     })
     .sort({ lastWrongAt: -1 })
     .toArray()
