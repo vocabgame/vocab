@@ -20,6 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { addWrongWord } from "@/lib/client/wrong-words-client"
 
 // จำนวนคำต่อด่าน
 const WORDS_PER_STAGE = 100
@@ -639,6 +640,12 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
 
     // ถ้าตอบผิด ให้แสดงข้อความและสามารถตอบใหม่ได้
     if (!correct) {
+      // บันทึกคำตอบผิดลงในฐานข้อมูล
+      try {
+        await addWrongWord(userId, word)
+      } catch (error) {
+        console.error("Error saving wrong word:", error)
+      }
       toast({
         title: "ไม่ถูกต้อง",
         description: "ลองตอบใหม่ครั้ง",
@@ -1002,12 +1009,15 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           <CardContent>
             <p className="text-center text-muted-foreground">ได้รับคำศัพท์ครบในระดับนี้แล้ว ไม่มีคำศัพท์ในฐานข้อมูล</p>
           </CardContent>
-          <CardFooter className="flex justify-center gap-4">
+          <CardFooter className="flex justify-center gap-4 flex-wrap">
             <Link href="/level-select">
               <Button>เลือกระดับและด่าน</Button>
             </Link>
             <Link href="/manage-words">
               <Button variant="outline">คำศัพท์</Button>
+            </Link>
+            <Link href="/review">
+              <Button variant="secondary">ทบทวนคำศัพท์ที่ตอบผิด</Button>
             </Link>
           </CardFooter>
         </Card>
@@ -1029,8 +1039,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center text-muted-foreground mb-6">ได้รับคำศัพท์ครบในด่านนี้แล้ว ไปเล่นด่านถัดไป</p>
-            <div className="flex justify-center gap-4">
+            <p className="text-center text-muted-foreground mb-6">ได้รับคำศัพท์ครบในด่านนี้แล้ว ไปเล่นด่านถัดไปหรือทบทวนคำศัพท์ที่ตอบผิด</p>
+            <div className="flex justify-center gap-4 flex-wrap">
               <Button
                 onClick={() => {
                   setShowStageComplete(false)
@@ -1041,6 +1051,9 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               </Button>
               <Link href="/level-select">
                 <Button variant="outline">เลือกระดับและด่าน</Button>
+              </Link>
+              <Link href="/review">
+                <Button variant="secondary">ทบทวนคำศัพท์ที่ตอบผิด</Button>
               </Link>
             </div>
           </CardContent>
@@ -1060,8 +1073,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
             <CardTitle className="text-center text-2xl">ด้วย! ผ่าน {word.level.toUpperCase()} แล้ว!</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-center text-muted-foreground mb-6">ได้รับคำศัพท์ครบในระดับนี้แล้ว ไปเล่นด่านถัดไป</p>
-            <div className="flex justify-center gap-4">
+            <p className="text-center text-muted-foreground mb-6">ได้รับคำศัพท์ครบในระดับนี้แล้ว ไปเล่นด่านถัดไปหรือทบทวนคำศัพท์ที่ตอบผิด</p>
+            <div className="flex justify-center gap-4 flex-wrap">
               <Button
                 onClick={() => {
                   setShowLevelComplete(false)
@@ -1072,6 +1085,9 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               </Button>
               <Link href="/level-select">
                 <Button variant="outline">เลือกระดับและด่าน</Button>
+              </Link>
+              <Link href="/review">
+                <Button variant="secondary">ทบทวนคำศัพท์ที่ตอบผิด</Button>
               </Link>
             </div>
           </CardContent>

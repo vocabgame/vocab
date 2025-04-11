@@ -429,7 +429,7 @@ export async function getWordsForStage(level: string, stage: number, completedWo
   }
 }
 
-async function generateChoicesForWord(word: any, db: any) {
+export async function generateChoicesForWord(word: any, db: any) {
   // ดึงตัวเลือกอื่นๆ สำหรับคำนี้
   const otherChoices = await db
     .collection("words")

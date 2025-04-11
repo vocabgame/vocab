@@ -24,6 +24,7 @@ export function Header({ user }: HeaderProps) {
 
   const navigationItems = [
     { href: "/game", label: "เล่นเกม", icon: null },
+    { href: "/review", label: "ทบทวนคำศัพท์", icon: <BookOpen className="h-4 w-4" /> },
     { href: "/level-select", label: "เลือกระดับ", icon: <Layers className="h-4 w-4" /> },
     { href: "/progress", label: "ความคืบหน้า", icon: <BarChart3 className="h-4 w-4" /> },
     { href: "/manage-words", label: "จัดการคำศัพท์", icon: <Database className="h-4 w-4" /> },
@@ -33,7 +34,7 @@ export function Header({ user }: HeaderProps) {
     <>
       {navigationItems.map((item) => (
         <Link key={item.href} href={item.href}>
-          <Button 
+          <Button
             variant={pathname === item.href ? "default" : "ghost"}
             className="w-full justify-start"
           >
