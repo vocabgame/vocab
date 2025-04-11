@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings } from "lucide-react"
+import { Volume2, SkipForward, ArrowRight, Eye, RefreshCw, Trophy, Settings, Trash } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -20,7 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { markWordAsMastered } from "@/lib/client/wrong-words-client"
+import { markWordAsMastered, clearAllWrongWords } from "@/lib/client/wrong-words-client"
 
 interface ReviewInterfaceProps {
   userId: string
@@ -29,6 +29,7 @@ interface ReviewInterfaceProps {
 export function ReviewInterface({ userId }: ReviewInterfaceProps) {
   const isMobile = useIsMobile()
   const [word, setWord] = useState<any>(null)
+  const [currentWordItem, setCurrentWordItem] = useState<any>(null)
   const [choices, setChoices] = useState<string[]>([])
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
@@ -39,6 +40,7 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
   const [wrongWords, setWrongWords] = useState<any[]>([])
   const [currentWordIndex, setCurrentWordIndex] = useState<number>(0)
   const [totalWrongWords, setTotalWrongWords] = useState<number>(0)
+  const [reviewProgress, setReviewProgress] = useState<any>(null)
   const [completedWords, setCompletedWords] = useState<string[]>([])
   const [noWordsFound, setNoWordsFound] = useState<boolean>(false)
 
@@ -50,6 +52,7 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
     try {
       setIsLoading(true)
 
+      // โหลดคำศัพท์ที่ตอบผิด
       const response = await fetch("/api/words/wrong")
 
       if (!response.ok) {
@@ -58,8 +61,16 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
 
       const data = await response.json()
 
+      // โหลดข้อมูลความคืบหน้าของการทบทวนคำศัพท์
+      const progressResponse = await fetch("/api/review/progress")
+
+      if (progressResponse.ok) {
+        const progressData = await progressResponse.json()
+        setReviewProgress(progressData)
+      }
+
       if (data && data.length > 0) {
-        // Filter out any entries with incomplete word data
+        // กรองคำศัพท์ที่มีข้อมูลไม่ครบถ้วนออก
         const validWords = data.filter(item =>
           item.word && item.word.english && item.word.thai && item.choices && item.choices.length > 0
         )
@@ -68,6 +79,7 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
           setWrongWords(validWords)
           setTotalWrongWords(validWords.length)
           setWord(validWords[0].word)
+          setCurrentWordItem(validWords[0]) // เก็บข้อมูลคำศัพท์ทั้งหมดไว้
           setChoices(validWords[0].choices)
           setCurrentWordIndex(0)
         } else {
@@ -90,37 +102,65 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
     }
   }, [toast])
 
-  // รีเซ็ตคำศัพท์ที่ตอบผิดทั้งหมด
+  // รีเซ็ตการทบทวนคำศัพท์ที่ตอบผิด
   const resetAllWrongWords = async () => {
     try {
       setIsLoading(true)
 
-      // ล้างคำศัพท์ที่ตอบผิดทั้งหมด
-      const response = await fetch("/api/words/wrong/reset", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId }),
-      })
+      // ล้างรายการคำที่ทำเสร็จแล้ว
+      setCompletedWords([])
 
-      if (!response.ok) {
-        throw new Error("Failed to reset wrong words")
+      // เริ่มต้นจากคำแรก
+      setCurrentWordIndex(0)
+
+      if (wrongWords.length > 0) {
+        setWord(wrongWords[0].word)
+        setCurrentWordItem(wrongWords[0])
+        setChoices(wrongWords[0].choices)
+        setSelectedAnswer(null)
+        setIsCorrect(null)
+        setIsRevealed(false)
       }
 
       toast({
-        title: "รีเซ็ตสำเร็จ",
-        description: "รีเซ็ตคำศัพท์ที่ตอบผิดทั้งหมดเรียบร้อยแล้ว",
+        title: "เริ่มต้นใหม่",
+        description: "เริ่มการทบทวนคำศัพท์ที่ตอบผิดใหม่",
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error("Error resetting review:", error)
+      toast({
+        title: "ข้อผิดพลาด",
+        description: "ไม่สามารถเริ่มต้นการทบทวนใหม่ได้",
+        variant: "destructive",
+        duration: 3000,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // ลบข้อมูลคำศัพท์ที่ตอบผิดทั้งหมด
+  const handleClearAllWrongWords = async () => {
+    try {
+      setIsLoading(true)
+
+      // ลบข้อมูลคำศัพท์ที่ตอบผิดทั้งหมด
+      const result = await clearAllWrongWords()
+
+      toast({
+        title: "ลบข้อมูลสำเร็จ",
+        description: `ลบข้อมูลคำศัพท์ที่ตอบผิดแล้ว ${result.deletedCount || 0} คำ`,
         duration: 3000,
       })
 
       // โหลดคำศัพท์ใหม่
       loadWrongWords()
     } catch (error) {
-      console.error("Error resetting wrong words:", error)
+      console.error("Error clearing wrong words:", error)
       toast({
         title: "ข้อผิดพลาด",
-        description: "ไม่สามารถรีเซ็ตคำศัพท์ที่ตอบผิดได้",
+        description: "ไม่สามารถลบข้อมูลคำศัพท์ที่ตอบผิดได้",
         variant: "destructive",
         duration: 3000,
       })
@@ -274,11 +314,29 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
     try {
       setIsLoading(true)
 
+      // ตรวจสอบว่ามี wordId หรือไม่
+      const wordIdToMark = currentWordItem?.wordId || (word?._id ? word._id.toString() : null)
+      console.log("Current word item:", currentWordItem)
+      console.log("Current word:", word)
+      console.log("Word ID to mark:", wordIdToMark)
+
+      if (!wordIdToMark) {
+        throw new Error("Word ID is missing")
+      }
+
       // ทำเครื่องหมายว่าได้เรียนรู้คำนี้แล้ว
-      await markWordAsMastered(word.wordId || word._id)
+      console.log("Marking word as mastered:", wordIdToMark)
+      const result = await markWordAsMastered(wordIdToMark)
 
       // เพิ่มคำนี้ในรายการคำที่ทำเสร็จแล้ว
-      setCompletedWords(prev => [...prev, word.wordId || word._id])
+      setCompletedWords(prev => [...prev, wordIdToMark])
+
+      // โหลดข้อมูลความคืบหน้าใหม่
+      const progressResponse = await fetch("/api/review/progress")
+      if (progressResponse.ok) {
+        const progressData = await progressResponse.json()
+        setReviewProgress(progressData)
+      }
 
       toast({
         title: "ถูกต้อง!",
@@ -333,6 +391,7 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
       const nextWordData = wrongWords[nextIndex]
       if (nextWordData && nextWordData.word) {
         setWord(nextWordData.word)
+        setCurrentWordItem(nextWordData) // เก็บข้อมูลคำศัพท์ทั้งหมดไว้
         setChoices(nextWordData.choices)
         setSelectedAnswer(null)
         setIsCorrect(null)
@@ -354,24 +413,29 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
         duration: 3000,
       })
 
-      // โหลดคำศัพท์ใหม่ (กรองคำที่ทำเสร็จแล้วออก)
-      const remainingWords = wrongWords.filter(item => {
-        const wordId = item.wordId || (item.word && item.word._id)
-        return !completedWords.includes(wordId)
+      // เริ่มต้นใหม่โดยโหลดคำศัพท์ทั้งหมดอีกครั้ง
+      toast({
+        title: "ทบทวนครบรอบแล้ว",
+        description: "กำลังเริ่มต้นการทบทวนรอบใหม่",
+        duration: 3000,
       })
 
-      if (remainingWords.length > 0) {
-        setWrongWords(remainingWords)
-        setTotalWrongWords(remainingWords.length)
-        setCurrentWordIndex(0)
-        setWord(remainingWords[0].word)
-        setChoices(remainingWords[0].choices)
+      // ล้างรายการคำที่ทำเสร็จแล้ว
+      setCompletedWords([])
+
+      // เริ่มต้นจากคำแรก
+      setCurrentWordIndex(0)
+
+      if (wrongWords.length > 0) {
+        setWord(wrongWords[0].word)
+        setCurrentWordItem(wrongWords[0])
+        setChoices(wrongWords[0].choices)
         setSelectedAnswer(null)
         setIsCorrect(null)
         setIsRevealed(false)
       } else {
-        // ถ้าไม่มีคำเหลือแล้ว
-        setNoWordsFound(true)
+        // ถ้าไม่มีคำเหลือแล้ว ให้โหลดใหม่ทั้งหมด
+        loadWrongWords()
       }
     }
   }
@@ -482,20 +546,43 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
               <AlertDialogTrigger asChild>
                 <Button variant="outline" size={isMobile ? "sm" : "default"} className="flex items-center gap-1 text-xs sm:text-sm">
                   <RefreshCw className="h-3 w-3" />
-                  รีเซ็ต
+                  เริ่มใหม่
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>แน่ใจหรือไม่?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    การกระทำนี้จะรีเซ็ตคำศัพท์ที่ตอบผิดทั้งหมด
+                    การกระทำนี้จะเริ่มต้นการทบทวนคำศัพท์ที่ตอบผิดใหม่
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                  <AlertDialogAction onClick={resetAllWrongWords} className="bg-destructive text-destructive-foreground">
-                    รีเซ็ต
+                  <AlertDialogAction onClick={resetAllWrongWords}>
+                    เริ่มใหม่
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size={isMobile ? "sm" : "default"} className="flex items-center gap-1 text-xs sm:text-sm">
+                  <Trash className="h-3 w-3" />
+                  ลบข้อมูล
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>แน่ใจหรือไม่?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    การกระทำนี้จะลบข้อมูลคำศัพท์ที่ตอบผิดทั้งหมดออกจากฐานข้อมูล
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClearAllWrongWords} className="bg-destructive text-destructive-foreground">
+                    ลบข้อมูล
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -503,7 +590,26 @@ export function ReviewInterface({ userId }: ReviewInterfaceProps) {
           </div>
         </div>
 
-        {/* ความคืบหน้า */}
+        {/* ความคืบหน้าของการทบทวน */}
+        {reviewProgress && (
+          <div className="mb-4">
+            <div className="flex justify-between text-xs mb-1">
+              <span>ความคืบหน้าการทบทวน</span>
+              <span>
+                {reviewProgress.masteredWords} / {reviewProgress.totalWords} คำ
+              </span>
+            </div>
+            <Progress
+              value={(reviewProgress.masteredWords / (reviewProgress.totalWords || 1)) * 100}
+              className="h-1.5 sm:h-2"
+            />
+            <div className="flex justify-between text-xs mt-1 text-muted-foreground">
+              <span>คำที่ต้องทบทวน: {reviewProgress.remainingWords} คำ</span>
+            </div>
+          </div>
+        )}
+
+        {/* ความคืบหน้าของคำปัจจุบัน */}
         <div className="mb-2">
           <div className="flex justify-between text-xs">
             <span>ความคืบหน้า</span>

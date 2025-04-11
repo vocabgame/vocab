@@ -37,8 +37,9 @@ export async function addWrongWord(userId: string, word: any) {
  */
 export async function markWordAsMastered(wordId: string) {
   try {
-    const response = await fetch("/api/words/wrong", {
-      method: "PUT",
+    // ดึง userId จาก session โดยอัตโนมัติ
+    const response = await fetch("/api/words/wrong/mastered", {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
@@ -54,6 +55,30 @@ export async function markWordAsMastered(wordId: string) {
     return await response.json();
   } catch (error) {
     console.error("Error marking word as mastered:", error);
+    throw error;
+  }
+}
+
+/**
+ * ลบข้อมูลคำศัพท์ที่ตอบผิดทั้งหมด
+ * @returns Promise that resolves when all wrong words are cleared
+ */
+export async function clearAllWrongWords() {
+  try {
+    const response = await fetch("/api/words/wrong/clear", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to clear wrong words");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error clearing wrong words:", error);
     throw error;
   }
 }

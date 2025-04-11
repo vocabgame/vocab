@@ -85,23 +85,140 @@ export async function markWordAsMastered(userId: string, wordId: string) {
   const client = await clientPromise
   const db = client.db()
 
+  // อัพเดตสถานะคำศัพท์เป็น mastered
   await db.collection("wrong_words").updateOne(
     {
       userId,
       wordId: new ObjectId(wordId)
     },
     {
-      $set: { mastered: true }
+      $set: {
+        mastered: true,
+        masteredAt: new Date() // เพิ่มเวลาที่ทำการ mastered
+      }
     }
   )
+
+  // อัพเดตความคืบหน้าของการทบทวนคำศัพท์
+  await updateReviewProgress(userId)
+
+  return { success: true }
+}
+
+/**
+ * อัพเดตความคืบหน้าของการทบทวนคำศัพท์
+ * @param userId ID ของผู้ใช้
+ */
+async function updateReviewProgress(userId: string) {
+  const client = await clientPromise
+  const db = client.db()
+
+  // นับจำนวนคำศัพท์ที่ตอบผิดทั้งหมด
+  const totalWrongWords = await db.collection("wrong_words").countDocuments({ userId })
+
+  // นับจำนวนคำศัพท์ที่ mastered แล้ว
+  const masteredWords = await db.collection("wrong_words").countDocuments({
+    userId,
+    mastered: true
+  })
+
+  // นับจำนวนคำศัพท์ที่ยังไม่ได้ mastered
+  const remainingWords = await db.collection("wrong_words").countDocuments({
+    userId,
+    mastered: false
+  })
+
+  // ตรวจสอบว่ามีข้อมูลความคืบหน้าอยู่แล้วหรือไม่
+  const existingProgress = await db.collection("review_progress").findOne({ userId })
+
+  if (existingProgress) {
+    // อัพเดตข้อมูลความคืบหน้าที่มีอยู่แล้ว
+    await db.collection("review_progress").updateOne(
+      { userId },
+      {
+        $set: {
+          totalWords: totalWrongWords,
+          masteredWords,
+          remainingWords,
+          lastUpdated: new Date()
+        }
+      }
+    )
+  } else {
+    // สร้างข้อมูลความคืบหน้าใหม่
+    await db.collection("review_progress").insertOne({
+      userId,
+      totalWords: totalWrongWords,
+      masteredWords,
+      remainingWords,
+      createdAt: new Date(),
+      lastUpdated: new Date()
+    })
+  }
+
+  return {
+    totalWords: totalWrongWords,
+    masteredWords,
+    remainingWords
+  }
+}
+
+/**
+ * ดึงข้อมูลความคืบหน้าของการทบทวนคำศัพท์
+ * @param userId ID ของผู้ใช้
+ */
+export async function getReviewProgress(userId: string) {
+  const client = await clientPromise
+  const db = client.db()
+
+  // ดึงข้อมูลความคืบหน้า
+  const progress = await db.collection("review_progress").findOne({ userId })
+
+  if (!progress) {
+    // ถ้ายังไม่มีข้อมูลความคืบหน้า ให้สร้างใหม่
+    return await updateReviewProgress(userId)
+  }
+
+  return progress
 }
 
 export async function resetAllWrongWords(userId: string) {
   const client = await clientPromise
   const db = client.db()
 
+  // ทำเครื่องหมายว่าคำศัพท์ที่ตอบผิดทั้งหมดเป็น mastered
   await db.collection("wrong_words").updateMany(
     { userId },
-    { $set: { mastered: true } }
+    {
+      $set: {
+        mastered: true,
+        masteredAt: new Date()
+      }
+    }
   )
+
+  // อัพเดตความคืบหน้าของการทบทวนคำศัพท์
+  await updateReviewProgress(userId)
+
+  return { success: true }
+}
+
+/**
+ * ลบข้อมูลคำศัพท์ที่ตอบผิดทั้งหมดของผู้ใช้
+ * @param userId ID ของผู้ใช้
+ */
+export async function clearAllWrongWords(userId: string) {
+  const client = await clientPromise
+  const db = client.db()
+
+  // ลบข้อมูลคำศัพท์ที่ตอบผิดทั้งหมด
+  const result = await db.collection("wrong_words").deleteMany({ userId })
+
+  // อัพเดตความคืบหน้าของการทบทวนคำศัพท์
+  await updateReviewProgress(userId)
+
+  return {
+    success: true,
+    deletedCount: result.deletedCount
+  }
 }
