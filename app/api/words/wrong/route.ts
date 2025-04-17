@@ -21,32 +21,34 @@ export async function GET() {
     }
 
     const wrongWords = await getWrongWords(session.user.id)
-
-    // สร้างตัวเลือกสำหรับแต่ละคำ
     const client = await clientPromise
     const db = client.db()
 
-    const wordsWithChoices = []
-    for (const wrongWord of wrongWords) {
-      // ตรวจสอบว่ามีข้อมูลคำศัพท์ครบถ้วนหรือไม่
-      if (!wrongWord.word || !wrongWord.word.english || !wrongWord.word.thai) {
-        console.error("Incomplete word data:", wrongWord)
-        continue
-      }
+    // กรองคำที่ข้อมูลครบถ้วน
+    const validWrongWords = wrongWords.filter(wrongWord => 
+      wrongWord.word && wrongWord.word.english && wrongWord.word.thai
+    )
 
+    // สร้าง Promise array สำหรับการสร้าง choices
+    const choicesPromises = validWrongWords.map(async (wrongWord) => {
       try {
         const choices = await generateChoicesForWord(wrongWord.word, db)
-        wordsWithChoices.push({
+        return {
           word: wrongWord.word,
           wordId: wrongWord.wordId,
           choices,
           wrongCount: wrongWord.wrongCount,
           lastWrongAt: wrongWord.lastWrongAt
-        })
+        }
       } catch (error) {
         console.error("Error generating choices for word:", wrongWord, error)
+        return null
       }
-    }
+    })
+
+    // รัน Promises
+    const wordsWithChoices = (await Promise.all(choicesPromises))
+      .filter(result => result !== null) // กรอง null ออก
 
     return NextResponse.json(wordsWithChoices)
   } catch (error) {
