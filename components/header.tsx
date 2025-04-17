@@ -6,7 +6,7 @@ import { signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { BookOpen, BarChart3, LogOut, User, Database, Layers, Menu } from "lucide-react"
+import { BookOpen, BarChart3, LogOut, User, Database, Layers, Menu, Users } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 interface HeaderProps {
@@ -22,12 +22,15 @@ export function Header({ user }: HeaderProps) {
   const pathname = usePathname()
   const isMobile = useIsMobile()
 
+  // สร้างรายการเมนูตามสิทธิ์ของผู้ใช้
   const navigationItems = [
     { href: "/game", label: "เล่นเกม", icon: null },
     { href: "/review", label: "ทบทวนคำศัพท์", icon: <BookOpen className="h-4 w-4" /> },
     { href: "/level-select", label: "เลือกระดับ", icon: <Layers className="h-4 w-4" /> },
     { href: "/progress", label: "ความคืบหน้า", icon: <BarChart3 className="h-4 w-4" /> },
     { href: "/manage-words", label: "จัดการคำศัพท์", icon: <Database className="h-4 w-4" /> },
+    // เพิ่มเมนูจัดการผู้ใช้สำหรับแอดมินเท่านั้น
+    ...(user?.role === "admin" ? [{ href: "/users", label: "จัดการผู้ใช้", icon: <Users className="h-4 w-4" /> }] : []),
   ]
 
   const NavigationLinks = () => (
@@ -70,6 +73,22 @@ export function Header({ user }: HeaderProps) {
         <DropdownMenuItem disabled>
           <span>{user?.name || user?.email}</span>
         </DropdownMenuItem>
+        {user?.role === "admin" && (
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard">
+              <Database className="mr-2 h-4 w-4" />
+              <span>แดชบอร์ด</span>
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {user?.role === "admin" && (
+          <DropdownMenuItem asChild>
+            <Link href="/users">
+              <Users className="mr-2 h-4 w-4" />
+              <span>จัดการผู้ใช้</span>
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
           <LogOut className="mr-2 h-4 w-4" />
           <span>ออกจากระบบ</span>
