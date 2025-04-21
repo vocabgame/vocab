@@ -5,29 +5,52 @@ import { updateUserProgress } from "@/lib/user-progress"
 
 export async function POST(request: Request) {
   try {
+    console.log("API: Progress update request received")
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      console.log("API: Unauthorized - no session")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json()
+    let body
+    try {
+      body = await request.json()
+    } catch (parseError) {
+      console.error("API: Error parsing request body:", parseError)
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    }
+
     const { userId, wordId, correct, revealed = false } = body
+    console.log(`API: Progress update for user ${userId}, word ${wordId}, correct: ${correct}, revealed: ${revealed}`)
 
     if (!userId || !wordId) {
+      console.log("API: Missing required fields")
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
     // Verify the user is updating their own progress
     if (userId !== session.user.id) {
+      console.log(`API: Unauthorized - user ID mismatch (${userId} vs ${session.user.id})`)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const progress = await updateUserProgress(userId, wordId, correct, revealed)
-
-    return NextResponse.json({ success: true, progress })
+    try {
+      const progress = await updateUserProgress(userId, wordId, correct, revealed)
+      console.log(`API: Progress updated successfully for word ${wordId}`)
+      return NextResponse.json({ success: true, progress })
+    } catch (progressError) {
+      console.error("API: Error in updateUserProgress:", progressError)
+      return NextResponse.json(
+        {
+          error: "Failed to update progress",
+          details: progressError instanceof Error ? progressError.message : "Unknown error in updateUserProgress",
+        },
+        { status: 500 },
+      )
+    }
   } catch (error) {
-    console.error("Error updating progress:", error)
+    console.error("API: Unhandled error in progress update:", error)
     return NextResponse.json(
       {
         error: "Failed to update progress",

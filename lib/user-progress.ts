@@ -70,24 +70,33 @@ export async function updateUserProgress(userId: string, wordId: string, correct
   const db = client.db()
 
   try {
+    console.log(`Updating progress for user ${userId}, word ${wordId}, correct: ${correct}, revealed: ${revealed}`)
+
     // Get the word to determine its level
     const word = await db.collection("words").findOne({
       _id: wordId.length === 24 ? new ObjectId(wordId) : wordId,
     })
 
     if (!word) {
+      console.error(`Word not found: ${wordId}`)
       throw new Error("Word not found")
     }
+
+    console.log(`Found word: ${word.english}, level: ${word.level}`)
 
     // Update user progress
     const userProgress = await getUserProgress(userId)
     const level = word.level
     const currentStage = userProgress.currentStage || 1
 
+    // Check if word is already in completedWords
+    const wordAlreadyCompleted = userProgress.completedWords.includes(wordId)
+    console.log(`Word already completed: ${wordAlreadyCompleted}`)
+
     // เฉพาะเมื่อตอบถูกหรือเปิดเฉลย จึงจะบันทึกลงฐานข้อมูล
     if (correct || revealed) {
       // Add word to completed words if not already there
-      if (!userProgress.completedWords.includes(wordId)) {
+      if (!wordAlreadyCompleted) {
         // อัพเดตจำนวนคำที่เรียนแล้วในระดับ (เฉพาะเมื่อตอบถูกเท่านั้น)
         const levelProgressUpdate = correct ? { [`levelProgress.${level}`]: 1 } : {}
 
@@ -95,32 +104,43 @@ export async function updateUserProgress(userId: string, wordId: string, correct
         const stageKey = `stageProgress.${level}.${currentStage}`
         const stageProgressUpdate = correct ? { [stageKey]: 1 } : {}
 
+        console.log(`Updating progress: Adding word to completedWords and updating counters`)
+
         // บันทึกคำศัพท์ที่เรียน
-        await db.collection("progress").updateOne(
+        const updateResult = await db.collection("progress").updateOne(
           { userId },
           {
             $push: { completedWords: wordId },
             $inc: { ...levelProgressUpdate, ...stageProgressUpdate },
           },
         )
+
+        console.log(`Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`)
+      } else {
+        console.log(`Word ${wordId} already in completedWords, skipping update`)
       }
     }
 
     // ดึงข้อมูลความคืบหน้าล่าสุด
     const updatedProgress = await getUserProgress(userId)
+    console.log(`Updated progress: level=${updatedProgress.currentLevel}, stage=${updatedProgress.currentStage}, completedWords=${updatedProgress.completedWords.length}`)
 
     // ตรวจสอบว่าควรเลื่อนไปด่านถัดไปหรือไม่
     const currentStageProgress =
       (updatedProgress.stageProgress[level] && updatedProgress.stageProgress[level][currentStage]) || 0
+    console.log(`Current stage progress: ${currentStageProgress}/${WORDS_PER_STAGE}`)
 
     // ถ้าเรียนครบตามจำนวนคำต่อด่านแล้ว ให้เลื่อนไปด่านถัดไป
     if (currentStageProgress >= WORDS_PER_STAGE) {
-      await db.collection("progress").updateOne({ userId }, { $inc: { currentStage: 1 } })
+      console.log(`Stage complete! Moving to next stage`)
+      const stageUpdateResult = await db.collection("progress").updateOne({ userId }, { $inc: { currentStage: 1 } })
+      console.log(`Stage update result: matched=${stageUpdateResult.matchedCount}, modified=${stageUpdateResult.modifiedCount}`)
     }
 
     // ตรวจสอบว่าควรเลื่อนไประดับถัดไปหรือไม่
     // นับจำนวนคำทั้งหมดในระดับปัจจุบัน
     const wordCountInCurrentLevel = await db.collection("words").countDocuments({ level })
+    console.log(`Words in level ${level}: ${wordCountInCurrentLevel}, completed: ${updatedProgress.levelProgress[level] || 0}`)
 
     // ถ้าเรียนครบทุกคำในระดับแล้ว ให้เลื่อนไประดับถัดไป
     if (updatedProgress.levelProgress[level] >= wordCountInCurrentLevel) {
@@ -129,7 +149,8 @@ export async function updateUserProgress(userId: string, wordId: string, correct
 
       if (currentIndex < levels.length - 1) {
         const nextLevel = levels[currentIndex + 1]
-        await db.collection("progress").updateOne(
+        console.log(`Level complete! Moving from ${level} to ${nextLevel}`)
+        const levelUpdateResult = await db.collection("progress").updateOne(
           { userId },
           {
             $set: {
@@ -138,11 +159,13 @@ export async function updateUserProgress(userId: string, wordId: string, correct
             },
           },
         )
+        console.log(`Level update result: matched=${levelUpdateResult.matchedCount}, modified=${levelUpdateResult.modifiedCount}`)
       }
     }
 
     // Return serialized progress
     const finalProgress = await db.collection("progress").findOne({ userId })
+    console.log(`Final progress: level=${finalProgress.currentLevel}, stage=${finalProgress.currentStage}, completedWords=${finalProgress.completedWords.length}`)
     return JSON.parse(JSON.stringify(finalProgress))
   } catch (error) {
     console.error("Error updating user progress:", error)
