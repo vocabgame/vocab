@@ -150,40 +150,124 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
         });
       }
 
-      // เรียกใช้ API ใหม่
-      const response = await fetch(`/api/words/game?userId=${userId}&page=${page}&limit=20`);
+      // เรียกใช้ API ใหม่ โดยส่งระดับและด่านปัจจุบันไปด้วย
+      // ตรวจสอบ URL parameters ก่อนเพื่อใช้ค่าจาก URL ถ้ามี
+      const urlParams = new URLSearchParams(window.location.search);
+      const levelParam = urlParams.get('level');
+      const stageParam = urlParams.get('stage');
 
-      if (!response.ok) {
-        throw new Error("Failed to load game words");
+      console.log(`URL parameters: level=${levelParam}, stage=${stageParam}`);
+
+      // ใช้ค่าจาก URL ถ้ามี ไม่เช่นนั้นใช้ค่าจาก progress
+      const level = levelParam || currentProgress.currentLevel;
+      const stage = stageParam ? parseInt(stageParam) : currentProgress.currentStage;
+
+      console.log(`Using level=${level}, stage=${stage} for API call`);
+
+      let data;
+      try {
+        const response = await fetch(`/api/words/game?userId=${userId}&page=${page}&limit=20&level=${level}&stage=${stage}`);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `API error: ${response.status}`);
+        }
+
+        data = await response.json();
+      } catch (fetchError) {
+        console.error("Error fetching from API:", fetchError);
+        throw new Error(fetchError instanceof Error ? fetchError.message : "Failed to load game words");
       }
-
-      const data = await response.json();
       console.log(`Loaded ${data.words?.length || 0} words from API`);
 
       // ถ้ามีคำศัพท์
       if (data.words && data.words.length > 0) {
+        // ตรวจสอบระดับของคำศัพท์ที่ได้รับ
+        const requestedLevel = levelParam || currentProgress.currentLevel;
+        const requestedStage = stageParam ? parseInt(stageParam) : currentProgress.currentStage;
+
+        // แสดงข้อมูลระดับของคำศัพท์ที่ได้รับ
+        console.log(`Received ${data.words.length} words. Checking levels...`);
+        console.log(`Requested level: ${requestedLevel}, stage: ${requestedStage}`);
+
+        // แสดงข้อมูลคำศัพท์ที่ได้รับ
+        data.words.forEach((wordData: any, index: number) => {
+          if (index < 5) { // แสดงแค่ 5 คำแรกเพื่อไม่ให้ log ยาวเกินไป
+            console.log(`Word ${index + 1}: ${wordData.word.english}, level: ${wordData.word.level}`);
+          }
+        });
+
+        // ตรวจสอบว่าคำศัพท์ที่ได้รับตรงกับระดับที่ร้องขอหรือไม่
+        const wrongLevelWords = data.words.filter((wordData: any) => wordData.word.level !== requestedLevel);
+        if (wrongLevelWords.length > 0) {
+          console.warn(`WARNING: Received ${wrongLevelWords.length} words with incorrect level!`);
+          console.warn(`Requested level: ${requestedLevel}, but received words from levels: ${[...new Set(wrongLevelWords.map((w: any) => w.word.level))].join(', ')}`);
+
+          // แสดงข้อความแจ้งเตือนผู้ใช้
+          toast({
+            title: "คำเตือน",
+            description: `ได้รับคำศัพท์จากระดับที่ไม่ตรงกับที่เลือก (เลือก ${requestedLevel.toUpperCase()}, ด่าน ${requestedStage})`,
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
+
         // ถ้าเป็นหน้าแรกหรือไม่ได้ต่อท้าย ให้แทนที่คำศัพท์ทั้งหมด
         if (page === 1 || !append) {
-          setGameWords(data.words);
-          setCurrentWordIndex(0);
+          // กรองเฉพาะคำศัพท์ที่ตรงกับระดับที่ร้องขอ
+          const filteredWords = data.words.filter((wordData: any) => wordData.word.level === requestedLevel);
 
-          // เซ็ตคำปัจจุบันและตัวเลือก
-          setWord(data.words[0].word);
-          setChoices(data.words[0].choices);
-          setSelectedAnswer(null);
-          setIsCorrect(null);
-          setIsRevealed(false);
+          if (filteredWords.length > 0) {
+            console.log(`Using ${filteredWords.length} words that match requested level ${requestedLevel}`);
+            setGameWords(filteredWords);
+            setCurrentWordIndex(0);
 
-          console.log(`Set current word to: ${data.words[0].word.english}`);
+            // เซ็ตคำปัจจุบันและตัวเลือก
+            setWord(filteredWords[0].word);
+            setChoices(filteredWords[0].choices);
+            setSelectedAnswer(null);
+            setIsCorrect(null);
+            setIsRevealed(false);
+
+            console.log(`Set current word to: ${filteredWords[0].word.english}, level: ${filteredWords[0].word.level}`);
+          } else {
+            // ถ้าไม่มีคำศัพท์ที่ตรงกับระดับที่ร้องขอ ให้ใช้คำศัพท์ทั้งหมด
+            console.warn(`No words match requested level ${requestedLevel}. Using all received words.`);
+            setGameWords(data.words);
+            setCurrentWordIndex(0);
+
+            // เซ็ตคำปัจจุบันและตัวเลือก
+            setWord(data.words[0].word);
+            setChoices(data.words[0].choices);
+            setSelectedAnswer(null);
+            setIsCorrect(null);
+            setIsRevealed(false);
+
+            console.log(`Set current word to: ${data.words[0].word.english}, level: ${data.words[0].word.level}`);
+          }
         } else {
           // ถ้าเป็นการโหลดเพิ่มเติม ให้ต่อท้ายคำศัพท์เดิม
-          setGameWords(prev => [...prev, ...data.words]);
+          // กรองเฉพาะคำศัพท์ที่ตรงกับระดับที่ร้องขอ
+          const filteredWords = data.words.filter((wordData: any) => wordData.word.level === requestedLevel);
+
+          if (filteredWords.length > 0) {
+            console.log(`Appending ${filteredWords.length} words that match requested level ${requestedLevel}`);
+            setGameWords(prev => [...prev, ...filteredWords]);
+          } else {
+            console.warn(`No words match requested level ${requestedLevel} for append. Using all received words.`);
+            setGameWords(prev => [...prev, ...data.words]);
+          }
           console.log(`Appended ${data.words.length} words to existing list`);
         }
 
         // อัพเดตหน้าปัจจุบันและสถานะว่ามีคำศัพท์เพิ่มเติมหรือไม่
         setCurrentPage(page);
         setHasMoreWords(data.hasMore);
+
+        // ตรวจสอบว่ามีการส่งข้อมูลระดับและด่านกลับมาด้วย
+        if (data.level && data.stage) {
+          console.log(`Server returned level: ${data.level}, stage: ${data.stage}`);
+        }
 
         // อัพเดตความคืบหน้า
         if (data.progress) {
@@ -448,6 +532,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 วินาที
 
+      // ตรวจสอบ URL parameters ก่อนเพื่อใช้ค่าจาก URL ถ้ามี
+      const urlParams = new URLSearchParams(window.location.search);
+      const levelParam = urlParams.get('level');
+      const stageParam = urlParams.get('stage');
+
+      console.log(`URL parameters in prefetchNextWord: level=${levelParam}, stage=${stageParam}`);
+
       // เพิ่ม cache-control เพื่อให้แน่ใจว่าไม่ใช้ข้อมูลจาก cache
       const response = await fetch("/api/words/next", {
         method: "POST",
@@ -460,6 +551,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           userId,
           currentWordId,
           prefetchCount: 3, // โหลดคำศัพท์ล่วงหน้า 3 คำ
+          level: levelParam || undefined,
+          stage: stageParam || undefined
         }),
         signal, // ใช้ signal จาก AbortController
       })
@@ -518,6 +611,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
           // ตั้งเวลาหมดเวลาสำหรับการร้องขอ
           const timeoutId = setTimeout(() => controller.abort(), 15000); // เพิ่มเวลาเป็น 15 วินาทีเพราะต้องโหลดคำศัพท์หลายคำ
 
+          // ตรวจสอบ URL parameters ก่อนเพื่อใช้ค่าจาก URL ถ้ามี
+          const urlParams = new URLSearchParams(window.location.search);
+          const levelParam = urlParams.get('level');
+          const stageParam = urlParams.get('stage');
+
+          console.log(`URL parameters in fetchNextWord: level=${levelParam}, stage=${stageParam}`);
+
           const response = await fetch("/api/words/next", {
             method: "POST",
             headers: {
@@ -529,6 +629,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               userId,
               currentWordId,
               prefetchCount: 100, // โหลดคำศัพท์ทั้งหมดในด่าน (100 คำ)
+              level: levelParam || undefined,
+              stage: stageParam || undefined
             }),
             signal, // ใช้ signal จาก AbortController
           })
@@ -711,6 +813,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       // สร้างฟังก์ชันสำหรับอัพเดตความคืบหน้าพร้อมระบบ retry
       const updateProgress = async (retryCount = 0, maxRetries = 3) => {
         try {
+          // ตรวจสอบ URL parameters เพื่อใช้ค่าจาก URL ถ้ามี
+          const urlParams = new URLSearchParams(window.location.search);
+          const levelParam = urlParams.get('level');
+          const stageParam = urlParams.get('stage');
+
+          console.log(`URL parameters in updateProgress: level=${levelParam}, stage=${stageParam}`);
+
           const response = await fetch("/api/progress", {
             method: "POST",
             headers: {
@@ -720,6 +829,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               userId,
               wordId: word._id,
               correct: true,
+              selectedLevel: levelParam || undefined,
+              selectedStage: stageParam || undefined,
             }),
           })
 
@@ -790,7 +901,7 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       }
 
       // เริ่มอัพเดตความคืบหน้าและเปลี่ยนไปคำถัดไป
-      updateProgress().then(success => {
+      updateProgress().then(() => {
         // เปลี่ยนไปคำถัดไปไม่ว่าจะอัพเดตสำเร็จหรือไม่
         handleNext()
         // ต้องแน่ใจว่า isLoading ถูกรีเซ็ตหลังจากเปลี่ยนไปคำถัดไป
@@ -837,6 +948,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       // สร้างฟังก์ชันสำหรับอัพเดตความคืบหน้าพร้อมระบบ retry
       const updateRevealedProgress = async (retryCount = 0, maxRetries = 3) => {
         try {
+          // ตรวจสอบ URL parameters เพื่อใช้ค่าจาก URL ถ้ามี
+          const urlParams = new URLSearchParams(window.location.search);
+          const levelParam = urlParams.get('level');
+          const stageParam = urlParams.get('stage');
+
+          console.log(`URL parameters in updateRevealedProgress: level=${levelParam}, stage=${stageParam}`);
+
           const response = await fetch("/api/progress", {
             method: "POST",
             headers: {
@@ -847,6 +965,8 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
               wordId: word._id,
               correct: false,
               revealed: true,
+              selectedLevel: levelParam || undefined,
+              selectedStage: stageParam || undefined,
             }),
           })
 
@@ -1148,10 +1268,26 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       setWord(initialWord);
       setChoices(initialChoices);
 
-      // โหลดคำศัพท์เพิ่มเติมด้วย API ใหม่
+      console.log(`Initial word: ${initialWord.english}, level: ${initialWord.level}`);
+      console.log(`Current progress - level: ${progress.currentLevel}, stage: ${progress.currentStage}`);
+
+      // ตรวจสอบ URL parameters ก่อนเพื่อใช้ค่าจาก URL ถ้ามี
+      const urlParams = new URLSearchParams(window.location.search);
+      const levelParam = urlParams.get('level');
+      const stageParam = urlParams.get('stage');
+
+      console.log(`URL parameters in useEffect: level=${levelParam}, stage=${stageParam}`);
+
+      // ตรวจสอบว่าระดับของคำเริ่มต้นตรงกับระดับใน progress หรือไม่
+      if (initialWord.level !== progress.currentLevel) {
+        console.log(`WARNING: Initial word level (${initialWord.level}) does not match progress level (${progress.currentLevel})`);
+        console.log(`Using progress level (${progress.currentLevel}) and stage (${progress.currentStage}) for loading words`);
+      }
+
+      // โหลดคำศัพท์เพิ่มเติมด้วย API ใหม่ โดยใช้ระดับและด่านจาก URL ถ้ามี ไม่เช่นนั้นใช้จาก progress
       loadGameWords(1, false);
     }
-  }, [initialWord, initialChoices, loadGameWords])
+  }, [initialWord, initialChoices, loadGameWords, progress])
 
   // เก็บไว้เพื่อความเข้ากันได้กับโค้ดเดิม
   useEffect(() => {

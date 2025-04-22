@@ -20,19 +20,54 @@ export async function getWordForUser(userId: string, progress: any) {
       }
     })
 
+    // ตรวจสอบว่ามีการระบุระดับและด่านหรือไม่
+    if (!progress.currentLevel || !progress.currentStage) {
+      console.error(`Missing level or stage in progress: level=${progress.currentLevel}, stage=${progress.currentStage}`);
+      // ใช้ค่าเริ่มต้นถ้าไม่มี
+      progress.currentLevel = progress.currentLevel || "a1";
+      progress.currentStage = progress.currentStage || 1;
+    }
+
     const currentLevel = progress.currentLevel
-    const currentStage = progress.currentStage || 1
+    const currentStage = progress.currentStage
 
     // ลดการ log ที่ไม่จำเป็น
     // console.log(`Fetching words for level ${currentLevel}, stage ${currentStage}`)
 
-    // ใช้ aggregation แทนการดึงข้อมูลทั้งหมดแล้วค่อยกรอง
-    // ดึงคำศัพท์ที่ยังไม่ได้เรียนในระดับปัจจุบันโดยตรง
-    const uncompletedWords = await db.collection("words").aggregate([
-      { $match: { level: currentLevel } },
-      { $match: { _id: { $nin: completedWordIds } } },
-      { $sample: { size: 20 } } // สุ่มคำศัพท์มาเลยเพื่อให้เร็วขึ้น
-    ]).toArray()
+    // คำนวณช่วงคำศัพท์ในด่านที่เลือก
+    const startIndex = (currentStage - 1) * WORDS_PER_STAGE
+    const endIndex = currentStage * WORDS_PER_STAGE
+
+    console.log(`Getting words for level: ${currentLevel}, stage: ${currentStage}, startIndex: ${startIndex}, endIndex: ${endIndex}`)
+
+    // ตรวจสอบว่ามีการระบุระดับหรือไม่
+    if (!currentLevel) {
+      console.error(`Missing level parameter. Using default level: a1`);
+      currentLevel = "a1";
+    }
+
+    console.log(`Fetching words with strict level filter: ${currentLevel}`);
+
+    // ดึงคำศัพท์ทั้งหมดในระดับที่เลือก
+    const allWordsInLevel = await db.collection("words")
+      .find({ level: currentLevel }) // กรองเฉพาะคำศัพท์ในระดับที่เลือกเท่านั้น
+      .sort({ _id: 1 })
+      .toArray()
+
+    // กรองเฉพาะคำศัพท์ในด่านที่เลือก
+    const wordsInStage = allWordsInLevel.slice(startIndex, endIndex)
+
+    console.log(`Found ${wordsInStage.length} words in stage ${currentStage} of level ${currentLevel}`)
+
+    // กรองคำศัพท์ที่ยังไม่ได้เรียน
+    const uncompletedWords = wordsInStage.filter(word =>
+      !completedWordIds.some(id =>
+        id.toString() === word._id.toString() ||
+        id === word._id.toString()
+      )
+    )
+
+    console.log(`Found ${uncompletedWords.length} uncompleted words in stage ${currentStage} of level ${currentLevel}`)
 
     // ถ้ามีคำศัพท์ที่ยังไม่ได้เรียนในระดับปัจจุบัน ให้ใช้คำเหล่านั้น
     if (uncompletedWords.length > 0) {
@@ -41,31 +76,83 @@ export async function getWordForUser(userId: string, progress: any) {
       return generateWordWithChoices(serializedWords, db)
     }
 
-    // ถ้าไม่มีคำศัพท์ที่ยังไม่ได้เรียนในระดับปัจจุบัน ให้ลองดูระดับถัดไป
-    // console.log(`No uncompleted words in level ${currentLevel}, trying next level`)
+    // ถ้าไม่มีคำศัพท์ที่ยังไม่ได้เรียนในด่านปัจจุบัน ให้ลองดูด่านถัดไป
+    console.log(`No uncompleted words in level ${currentLevel}, stage ${currentStage}. Checking next stage.`)
 
-    // ลองดูระดับถัดไป
+    // ลองดูด่านถัดไปในระดับเดียวกัน
+    const nextStage = currentStage + 1
+    const nextStageStartIndex = nextStage * WORDS_PER_STAGE
+    const nextStageEndIndex = (nextStage + 1) * WORDS_PER_STAGE
+
+    // กรองเฉพาะคำศัพท์ในด่านถัดไป
+    // ใช้ allWordsInLevel ที่มีอยู่แล้ว
+    const wordsInNextStage = allWordsInLevel.slice(nextStageStartIndex, nextStageEndIndex)
+
+    if (wordsInNextStage.length > 0) {
+      console.log(`Found ${wordsInNextStage.length} words in next stage ${nextStage} of level ${currentLevel}`)
+
+      // กรองคำศัพท์ที่ยังไม่ได้เรียน
+      const uncompletedWordsInNextStage = wordsInNextStage.filter(word =>
+        !completedWordIds.some(id =>
+          id.toString() === word._id.toString() ||
+          id === word._id.toString()
+        )
+      )
+
+      console.log(`Found ${uncompletedWordsInNextStage.length} uncompleted words in next stage ${nextStage} of level ${currentLevel}`)
+
+      if (uncompletedWordsInNextStage.length > 0) {
+        // อัพเดตด่านปัจจุบันของผู้ใช้
+        await db.collection("progress").updateOne({ userId }, { $set: { currentStage: nextStage } })
+
+        // แปลงเป็น JSON สำหรับ client
+        const serializedWords = JSON.parse(JSON.stringify(uncompletedWordsInNextStage))
+        return generateWordWithChoices(serializedWords, db)
+      }
+    }
+
+    // ถ้าไม่มีคำศัพท์ในด่านถัดไป ให้ลองดูระดับถัดไป
     const levels = ["a1", "a2", "b1", "b2", "c1", "c2"]
     const currentIndex = levels.indexOf(currentLevel)
 
     if (currentIndex < levels.length - 1) {
       const nextLevel = levels[currentIndex + 1]
-      // console.log(`Moving to next level: ${nextLevel}`)
+      console.log(`No more words in current level ${currentLevel}, trying next level: ${nextLevel}`)
 
       // อัพเดตระดับและด่านปัจจุบันของผู้ใช้
       await db.collection("progress").updateOne({ userId }, { $set: { currentLevel: nextLevel, currentStage: 1 } })
 
-      // ดึงคำศัพท์จากระดับถัดไปโดยตรง
-      const uncompletedNextLevelWords = await db.collection("words").aggregate([
-        { $match: { level: nextLevel } },
-        { $match: { _id: { $nin: completedWordIds } } },
-        { $sample: { size: 20 } }
-      ]).toArray()
+      // คำนวณช่วงคำศัพท์ในด่านแรกของระดับใหม่
+      const newStageStartIndex = 0
+      const newStageEndIndex = WORDS_PER_STAGE
 
-      if (uncompletedNextLevelWords.length > 0) {
-        // console.log(`Found ${uncompletedNextLevelWords.length} uncompleted words in level ${nextLevel}`)
-        const serializedNextLevelWords = JSON.parse(JSON.stringify(uncompletedNextLevelWords))
-        return generateWordWithChoices(serializedNextLevelWords, db)
+      // ดึงคำศัพท์ทั้งหมดในระดับใหม่
+      const allWordsInNextLevel = await db.collection("words")
+        .find({ level: nextLevel })
+        .sort({ _id: 1 })
+        .toArray()
+
+      // กรองเฉพาะคำศัพท์ในด่านแรก
+      const wordsInFirstStage = allWordsInNextLevel.slice(newStageStartIndex, newStageEndIndex)
+
+      if (wordsInFirstStage.length > 0) {
+        console.log(`Found ${wordsInFirstStage.length} words in first stage of level ${nextLevel}`)
+
+        // กรองคำศัพท์ที่ยังไม่ได้เรียน
+        const uncompletedWordsInFirstStage = wordsInFirstStage.filter(word =>
+          !completedWordIds.some(id =>
+            id.toString() === word._id.toString() ||
+            id === word._id.toString()
+          )
+        )
+
+        console.log(`Found ${uncompletedWordsInFirstStage.length} uncompleted words in first stage of level ${nextLevel}`)
+
+        if (uncompletedWordsInFirstStage.length > 0) {
+          // แปลงเป็น JSON สำหรับ client
+          const serializedWords = JSON.parse(JSON.stringify(uncompletedWordsInFirstStage))
+          return generateWordWithChoices(serializedWords, db)
+        }
       }
     }
 
@@ -166,7 +253,7 @@ async function generateWordWithChoices(words: any[], db: any) {
   }
 }
 
-export async function getNextWord(userId: string, currentWordId: string) {
+export async function getNextWord(userId: string, currentWordId: string, selectedLevel?: string, selectedStage?: number) {
   try {
     const client = await clientPromise
     const db = client.db()
@@ -190,6 +277,16 @@ export async function getNextWord(userId: string, currentWordId: string) {
 
     // เรียกใช้ getWordForUser เพื่อดึงคำถัดไป
     // ใช้ Promise.all เพื่อทำงานพร้อมกัน
+
+    // ถ้ามีการระบุระดับและด่าน ให้ใช้ค่าที่ระบุ
+    if (selectedLevel || selectedStage) {
+      console.log(`Using selected level: ${selectedLevel}, stage: ${selectedStage} for getNextWord`);
+
+      // อัพเดต tempProgress ด้วยค่าที่ระบุ
+      if (selectedLevel) tempProgress.currentLevel = selectedLevel;
+      if (selectedStage) tempProgress.currentStage = selectedStage;
+    }
+
     const [result, updatedProgress] = await Promise.all([
       getWordForUser(userId, tempProgress),
       getUserProgress(userId)
@@ -285,7 +382,7 @@ export async function getAllWordsInStage(userId: string, level: string, stage: n
 }
 
 // ดึงคำศัพท์หลายคำพร้อมกัน
-export async function getNextWords(userId: string, currentWordId: string, count: number = 3) {
+export async function getNextWords(userId: string, currentWordId: string, count: number = 3, selectedLevel?: string, selectedStage?: number) {
   try {
     const client = await clientPromise
     const db = client.db()
@@ -312,6 +409,17 @@ export async function getNextWords(userId: string, currentWordId: string, count:
 
     // ดึงคำศัพท์ทีละคำตามจำนวนที่ต้องการ
     for (let i = 0; i < count; i++) {
+      // ถ้ามีการระบุระดับและด่าน ให้ใช้ค่าที่ระบุ
+      if (selectedLevel || selectedStage) {
+        if (i === 0) { // แสดง log เฉพาะครั้งแรก
+          console.log(`Using selected level: ${selectedLevel}, stage: ${selectedStage} for getNextWords`);
+        }
+
+        // อัพเดต currentTempProgress ด้วยค่าที่ระบุ
+        if (selectedLevel) currentTempProgress.currentLevel = selectedLevel;
+        if (selectedStage) currentTempProgress.currentStage = selectedStage;
+      }
+
       // ดึงคำศัพท์ถัดไป
       const wordResult = await getWordForUser(userId, currentTempProgress);
 

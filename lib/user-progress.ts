@@ -65,7 +65,7 @@ export async function getUserProgress(userId: string) {
   return JSON.parse(JSON.stringify(userProgress))
 }
 
-export async function updateUserProgress(userId: string, wordId: string, correct: boolean, revealed = false) {
+export async function updateUserProgress(userId: string, wordId: string, correct: boolean, revealed = false, selectedLevel?: string, selectedStage?: number) {
   const client = await clientPromise
   const db = client.db()
 
@@ -86,8 +86,17 @@ export async function updateUserProgress(userId: string, wordId: string, correct
 
     // Update user progress
     const userProgress = await getUserProgress(userId)
-    const level = word.level
-    const currentStage = userProgress.currentStage || 1
+
+    // Use the selected level and stage if provided, otherwise use the word's level and user's current stage
+    const level = selectedLevel || word.level
+    const currentStage = selectedStage || userProgress.currentStage || 1
+
+    console.log(`Using level: ${level}, stage: ${currentStage} for progress update (word level: ${word.level})`)
+
+    // If the selected level is different from the word's level, log a warning
+    if (selectedLevel && selectedLevel !== word.level) {
+      console.warn(`WARNING: Selected level (${selectedLevel}) is different from word level (${word.level}). Using selected level for progress update.`)
+    }
 
     // Check if word is already in completedWords
     const wordAlreadyCompleted = userProgress.completedWords.includes(wordId)

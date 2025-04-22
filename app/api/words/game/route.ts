@@ -20,6 +20,9 @@ export async function GET(request: Request) {
     const userId = searchParams.get("userId")
     const page = Number.parseInt(searchParams.get("page") || "1")
     const limit = Number.parseInt(searchParams.get("limit") || "20")
+    // Get level and stage from query parameters if provided
+    const requestedLevel = searchParams.get("level")
+    const requestedStage = searchParams.get("stage") ? Number.parseInt(searchParams.get("stage") || "1") : null
 
     if (!userId) {
       return NextResponse.json({ error: "Missing userId parameter" }, { status: 400 })
@@ -32,6 +35,32 @@ export async function GET(request: Request) {
 
     // ดึงความคืบหน้าของผู้ใช้
     const progress = await getUserProgress(userId)
+
+    // Use requested level and stage if provided, otherwise use user's current progress
+    const currentLevel = requestedLevel || progress.currentLevel
+    const currentStage = requestedStage || progress.currentStage
+
+    const client = await clientPromise
+    const db = client.db()
+
+    // ถ้ามีการระบุระดับหรือด่านใน URL ให้บันทึกลงใน progress ของผู้ใช้
+    if (requestedLevel || requestedStage) {
+      console.log(`Updating user progress with requested level: ${requestedLevel}, stage: ${requestedStage}`)
+      await db.collection("progress").updateOne(
+        { userId },
+        { $set: {
+          currentLevel: requestedLevel || progress.currentLevel,
+          currentStage: requestedStage || progress.currentStage
+        }}
+      )
+
+      // อัพเดต progress ในหน่วยความจำด้วย
+      if (requestedLevel) progress.currentLevel = requestedLevel;
+      if (requestedStage) progress.currentStage = requestedStage;
+    }
+
+    console.log(`Fetching words for level: ${currentLevel}, stage: ${currentStage}, page: ${page}`)
+
     const completedWordIds = progress.completedWords.map((id: string) => {
       try {
         return id.length === 24 ? new ObjectId(id) : id
@@ -40,48 +69,161 @@ export async function GET(request: Request) {
       }
     })
 
-    const client = await clientPromise
-    const db = client.db()
+    // ไม่ต้องสร้าง client และ db ใหม่ เพราะสร้างไปแล้วด้านบน
 
-    // ดึงคำศัพท์ที่ยังไม่ได้เรียนในระดับปัจจุบัน
-    let words = await db.collection("words")
-      .find({ 
-        level: progress.currentLevel,
-        _id: { $nin: completedWordIds }
-      })
+    // คำนวณช่วงคำศัพท์ในด่านที่เลือก
+    const WORDS_PER_STAGE = 100
+    const startIndex = (currentStage - 1) * WORDS_PER_STAGE
+    const endIndex = currentStage * WORDS_PER_STAGE
+
+    console.log(`Calculating word range for level: ${currentLevel}, stage: ${currentStage}`);
+    console.log(`Word range: startIndex=${startIndex}, endIndex=${endIndex}`);
+
+    // ดึงคำศัพท์ทั้งหมดในระดับที่เลือก
+    // ตรวจสอบว่ามีการระบุระดับหรือไม่
+    if (!currentLevel) {
+      console.error(`Missing level parameter. Using default level: a1`);
+      currentLevel = "a1";
+    }
+
+    console.log(`Fetching words with strict level filter: ${currentLevel}`);
+
+    const allWordsInLevel = await db.collection("words")
+      .find({ level: currentLevel }) // กรองเฉพาะคำศัพท์ในระดับที่เลือกเท่านั้น
       .sort({ _id: 1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
       .toArray()
 
-    // ถ้าไม่มีคำศัพท์ในระดับปัจจุบัน ให้ลองดูระดับถัดไป
-    if (words.length === 0) {
-      const levels = ["a1", "a2", "b1", "b2", "c1", "c2"]
-      const currentIndex = levels.indexOf(progress.currentLevel)
+    console.log(`Found ${allWordsInLevel.length} total words in level ${currentLevel}`);
 
-      if (currentIndex < levels.length - 1) {
-        const nextLevel = levels[currentIndex + 1]
-        
-        // ดึงคำศัพท์จากระดับถัดไป
-        words = await db.collection("words")
-          .find({ 
-            level: nextLevel,
-            _id: { $nin: completedWordIds }
-          })
-          .sort({ _id: 1 })
-          .limit(limit)
-          .toArray()
-          
-        // อัพเดตระดับและด่านปัจจุบันของผู้ใช้
+    // ตรวจสอบว่ามีคำศัพท์ในระดับที่เลือกหรือไม่
+    if (allWordsInLevel.length === 0) {
+      console.warn(`No words found in level ${currentLevel}. Please check the database.`);
+      return NextResponse.json({
+        words: [],
+        page,
+        totalUncompletedWords: 0,
+        progress,
+        level: currentLevel,
+        stage: currentStage,
+        hasMore: false,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, max-age=0',
+        }
+      });
+    }
+
+    // กรองเฉพาะคำศัพท์ในด่านที่เลือก
+    const wordsInStage = allWordsInLevel.slice(startIndex, endIndex)
+
+    console.log(`Found ${wordsInStage.length} words in stage ${currentStage} of level ${currentLevel}`);
+
+    // ตรวจสอบว่ามีคำศัพท์ในด่านที่เลือกหรือไม่
+    if (wordsInStage.length === 0) {
+      console.warn(`No words found in stage ${currentStage} of level ${currentLevel}. Please check the database.`);
+      return NextResponse.json({
+        words: [],
+        page,
+        totalUncompletedWords: 0,
+        progress,
+        level: currentLevel,
+        stage: currentStage,
+        hasMore: false,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, max-age=0',
+        }
+      });
+    }
+
+    // กรองคำศัพท์ที่ยังไม่ได้เรียน
+    const uncompletedWordsInStage = wordsInStage.filter(word =>
+      !completedWordIds.some(id =>
+        id.toString() === word._id.toString() ||
+        id === word._id.toString()
+      )
+    )
+
+    console.log(`Found ${uncompletedWordsInStage.length} uncompleted words in stage ${currentStage} of level ${currentLevel}`);
+
+    // แสดงข้อมูลคำศัพท์ที่พบ
+    if (uncompletedWordsInStage.length > 0) {
+      console.log(`First 3 uncompleted words in stage ${currentStage} of level ${currentLevel}:`);
+      uncompletedWordsInStage.slice(0, 3).forEach((word, index) => {
+        console.log(`Word ${index + 1}: ${word.english}, level: ${word.level}`);
+      });
+    }
+
+    // ดึงคำศัพท์ตามจำนวนที่ต้องการ (pagination)
+    let words = uncompletedWordsInStage
+      .slice((page - 1) * limit, page * limit)
+
+    // ถ้าไม่มีคำศัพท์ในด่านปัจจุบัน ให้ลองดูด่านถัดไปในระดับเดียวกัน
+    if (words.length === 0 && !requestedStage) {
+      const nextStage = currentStage + 1
+
+      // ตรวจสอบว่ามีคำศัพท์ในด่านถัดไปหรือไม่
+      const nextStageStartIndex = nextStage * WORDS_PER_STAGE
+      const nextStageEndIndex = (nextStage + 1) * WORDS_PER_STAGE
+      const wordsInNextStage = allWordsInLevel.slice(nextStageStartIndex, nextStageEndIndex)
+
+      if (wordsInNextStage.length > 0) {
+        console.log(`No words in current stage, trying next stage ${nextStage}`)
+
+        // กรองคำศัพท์ที่ยังไม่ได้เรียนในด่านถัดไป
+        const uncompletedWordsInNextStage = wordsInNextStage.filter(word =>
+          !completedWordIds.some(id =>
+            id.toString() === word._id.toString() ||
+            id === word._id.toString()
+          )
+        )
+
+        words = uncompletedWordsInNextStage.slice(0, limit)
+
+        // อัพเดตด่านปัจจุบันของผู้ใช้ (เฉพาะเมื่อไม่ได้ระบุด่านเฉพาะเจาะจง)
         if (words.length > 0) {
           await db.collection("progress").updateOne(
-            { userId }, 
-            { $set: { currentLevel: nextLevel, currentStage: 1 } }
+            { userId },
+            { $set: { currentStage: nextStage } }
           )
-          
+
           // อัพเดตความคืบหน้า
-          progress.currentLevel = nextLevel
-          progress.currentStage = 1
+          progress.currentStage = nextStage
+        }
+      } else {
+        // ถ้าไม่มีคำศัพท์ในด่านถัดไป ให้ลองดูระดับถัดไป
+        const levels = ["a1", "a2", "b1", "b2", "c1", "c2"]
+        const levelIndex = levels.indexOf(currentLevel)
+
+        if (levelIndex < levels.length - 1) {
+          const nextLevel = levels[levelIndex + 1]
+          console.log(`No words in current level, trying next level ${nextLevel}`)
+
+          // ดึงคำศัพท์จากระดับถัดไป (ด่าน 1)
+          const nextLevelWords = await db.collection("words")
+            .find({
+              level: nextLevel,
+              _id: { $nin: completedWordIds }
+            })
+            .sort({ _id: 1 })
+            .limit(limit)
+            .toArray()
+
+          // อัพเดตระดับและด่านปัจจุบันของผู้ใช้
+          if (nextLevelWords.length > 0) {
+            await db.collection("progress").updateOne(
+              { userId },
+              { $set: { currentLevel: nextLevel, currentStage: 1 } }
+            )
+
+            // อัพเดตความคืบหน้า
+            progress.currentLevel = nextLevel
+            progress.currentStage = 1
+
+            words = nextLevelWords
+          }
         }
       }
     }
@@ -100,21 +242,18 @@ export async function GET(request: Request) {
     const wordsWithChoices = []
     for (const word of words) {
       const choices = await generateChoicesForWord(word, db)
-      wordsWithChoices.push({ 
-        word, 
+      wordsWithChoices.push({
+        word,
         choices,
-        completed: completedWordIds.some(id => 
-          id.toString() === word._id.toString() || 
+        completed: completedWordIds.some(id =>
+          id.toString() === word._id.toString() ||
           id === word._id.toString()
         )
       })
     }
 
-    // นับจำนวนคำศัพท์ทั้งหมดที่ยังไม่ได้เรียนในระดับปัจจุบัน
-    const totalUncompletedWords = await db.collection("words").countDocuments({
-      level: progress.currentLevel,
-      _id: { $nin: completedWordIds }
-    })
+    // นับจำนวนคำศัพท์ทั้งหมดที่ยังไม่ได้เรียนในด่านปัจจุบัน
+    const totalUncompletedWords = uncompletedWordsInStage.length
 
     // แปลง ObjectId เป็น string สำหรับ client
     const serializedWords = JSON.parse(JSON.stringify(wordsWithChoices))
@@ -124,7 +263,9 @@ export async function GET(request: Request) {
       page,
       totalUncompletedWords,
       progress,
-      hasMore: words.length === limit,
+      level: currentLevel,
+      stage: currentStage,
+      hasMore: (page * limit) < uncompletedWordsInStage.length,
     }, {
       headers: {
         'Content-Type': 'application/json',
@@ -134,10 +275,10 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Error fetching game words:", error)
     return NextResponse.json(
-      { 
+      {
         error: "Failed to fetch game words",
         details: error instanceof Error ? error.message : "Unknown error",
-      }, 
+      },
       { status: 500 }
     )
   }

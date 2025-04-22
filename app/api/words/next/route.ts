@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       }
 
       const body = await request.json()
-      const { userId, currentWordId, prefetchCount = 1 } = body
+      const { userId, currentWordId, prefetchCount = 1, level, stage } = body
 
       if (!userId || !currentWordId) {
         return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -33,8 +33,12 @@ export async function POST(request: Request) {
 
       // ดึงข้อมูลความคืบหน้าก่อนโหลดคำ
       const oldProgress = await getUserProgress(userId)
-      const oldLevel = oldProgress.currentLevel
-      const oldStage = oldProgress.currentStage || 1
+
+      // ใช้ค่าจาก parameters ถ้ามี ไม่เช่นนั้นใช้จาก progress
+      const oldLevel = level || oldProgress.currentLevel
+      const oldStage = stage ? parseInt(String(stage)) : (oldProgress.currentStage || 1)
+
+      console.log(`Loading next words for level: ${oldLevel}, stage: ${oldStage}`)
 
       let result;
 
@@ -44,9 +48,9 @@ export async function POST(request: Request) {
         result = await getAllWordsInStage(userId, oldLevel, oldStage);
         console.log(`Loaded ${result.totalWords} words (${result.uncompletedCount} uncompleted, ${result.completedCount} completed)`);
       } else if (prefetchCount > 1) {
-        result = await getNextWords(userId, currentWordId, prefetchCount)
+        result = await getNextWords(userId, currentWordId, prefetchCount, oldLevel, oldStage)
       } else {
-        result = await getNextWord(userId, currentWordId)
+        result = await getNextWord(userId, currentWordId, oldLevel, oldStage)
       }
 
       const newProgress = await getUserProgress(userId)

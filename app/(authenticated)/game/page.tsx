@@ -5,18 +5,36 @@ import { getUserProgress } from "@/lib/user-progress"
 import { getWordForUser, getLevelStats } from "@/lib/words"
 import { redirect } from "next/navigation"
 
-export default async function GamePage() {
+export default async function GamePage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined }
+}) {
   const session = await getServerSession(authOptions)
 
   if (!session) {
     redirect("/")
   }
 
+  // Get level and stage from URL parameters if provided
+  const levelParam = searchParams?.level ? String(searchParams.level) : undefined
+  const stageParam = searchParams?.stage ? parseInt(String(searchParams.stage)) : undefined
+
+  console.log(`Game page - URL parameters: level=${levelParam}, stage=${stageParam}`)
+
   const userId = session.user.id
   const progress = await getUserProgress(userId)
   const stats = await getLevelStats(userId)
 
+  // If level and stage are provided in URL, override the progress
+  if (levelParam && stageParam) {
+    console.log(`Game page - Overriding progress with level=${levelParam}, stage=${stageParam}`)
+    progress.currentLevel = levelParam
+    progress.currentStage = stageParam
+  }
+
   try {
+    console.log(`Game page - Getting word for user with level=${progress.currentLevel}, stage=${progress.currentStage}`)
     const { word, choices } = await getWordForUser(userId, progress)
 
     return (

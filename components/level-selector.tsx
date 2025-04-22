@@ -68,8 +68,8 @@ export function LevelSelector({ userId, progress, stats }: LevelSelectorProps) {
         description: `เลือกระดับ ${level.toUpperCase()} ด่าน ${stage} เรียบร้อยแล้ว`,
       })
 
-      // ไปที่หน้าเล่นเกม
-      router.push("/game")
+      // ไปที่หน้าเล่นเกม พร้อมกับพารามิเตอร์ระดับและด่าน
+      router.push(`/game?level=${level}&stage=${stage}`)
     } catch (error) {
       console.error("Error selecting level and stage:", error)
       toast({
@@ -82,22 +82,11 @@ export function LevelSelector({ userId, progress, stats }: LevelSelectorProps) {
     }
   }
 
-  // ตรวจสอบว่าระดับไหนปลดล็อคแล้ว
-  const unlockedLevels = ["a1"] // เริ่มต้นปลดล็อคระดับ A1
+  // ไม่ต้องล็อคระดับและด่าน ให้เลือกได้ทุกระดับ
   const levels = ["a1", "a2", "b1", "b2", "c1", "c2"]
 
-  // ปลดล็อคระดับถัดไปถ้าระดับปัจจุบันเรียนครบแล้ว
-  for (let i = 0; i < levels.length - 1; i++) {
-    const currentLevel = levels[i]
-    const nextLevel = levels[i + 1]
-    const levelStats = stats.levels.find((l) => l.level === currentLevel)
-
-    if (levelStats && levelStats.completed > 0 && levelStats.completed >= levelStats.total * 0.7) {
-      if (!unlockedLevels.includes(nextLevel)) {
-        unlockedLevels.push(nextLevel)
-      }
-    }
-  }
+  // ทุกระดับถูกปลดล็อคแล้ว
+  const unlockedLevels = [...levels]
 
   return (
     <div className="space-y-6">
@@ -106,20 +95,31 @@ export function LevelSelector({ userId, progress, stats }: LevelSelectorProps) {
           {levels.map((level) => {
             const isUnlocked = unlockedLevels.includes(level)
             return (
-              <TabsTrigger key={level} value={level} disabled={!isUnlocked} className="relative">
+              <TabsTrigger key={level} value={level} className="relative">
                 {level.toUpperCase()}
-                {!isUnlocked && <Lock className="absolute top-1 right-1 h-3 w-3 text-muted-foreground" />}
               </TabsTrigger>
             )
           })}
         </TabsList>
 
         {levels.map((level) => {
+          // ดึงข้อมูลของระดับ
           const levelStats = stats.levels.find((l) => l.level === level) || {
             level,
             total: 0,
             completed: 0,
             stages: [],
+          }
+
+          // ถ้าไม่มีด่าน ให้สร้างด่านขึ้นมา 10 ด่าน
+          if (levelStats.stages.length === 0) {
+            for (let i = 1; i <= 10; i++) {
+              levelStats.stages.push({
+                stage: i,
+                total: 100,
+                completed: 0
+              });
+            }
           }
 
           const levelProgress = levelStats.total > 0 ? Math.round((levelStats.completed / levelStats.total) * 100) : 0
@@ -178,7 +178,7 @@ export function LevelSelector({ userId, progress, stats }: LevelSelectorProps) {
       </Tabs>
 
       <div className="flex justify-center">
-        <Button onClick={() => router.push("/game")} className="w-full max-w-xs">
+        <Button onClick={() => router.push(`/game?level=${progress.currentLevel}&stage=${progress.currentStage}`)} className="w-full max-w-xs">
           เล่นต่อจากด่านปัจจุบัน
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>

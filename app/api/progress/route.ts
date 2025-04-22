@@ -21,8 +21,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
 
-    const { userId, wordId, correct, revealed = false } = body
-    console.log(`API: Progress update for user ${userId}, word ${wordId}, correct: ${correct}, revealed: ${revealed}`)
+    const { userId, wordId, correct, revealed = false, selectedLevel, selectedStage } = body
+    console.log(`API: Progress update for user ${userId}, word ${wordId}, correct: ${correct}, revealed: ${revealed}, selectedLevel: ${selectedLevel}, selectedStage: ${selectedStage}`)
 
     if (!userId || !wordId) {
       console.log("API: Missing required fields")
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const progress = await updateUserProgress(userId, wordId, correct, revealed)
+      const progress = await updateUserProgress(userId, wordId, correct, revealed, selectedLevel, selectedStage ? parseInt(String(selectedStage)) : undefined)
       console.log(`API: Progress updated successfully for word ${wordId}`)
       return NextResponse.json({ success: true, progress })
     } catch (progressError) {
