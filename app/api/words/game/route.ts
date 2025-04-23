@@ -71,15 +71,14 @@ export async function GET(request: Request) {
 
     // ไม่ต้องสร้าง client และ db ใหม่ เพราะสร้างไปแล้วด้านบน
 
-    // คำนวณช่วงคำศัพท์ในด่านที่เลือก
+    // คำนวณช่วง sequence ในด่านที่เลือก
     const WORDS_PER_STAGE = 100
-    const startIndex = (currentStage - 1) * WORDS_PER_STAGE
-    const endIndex = currentStage * WORDS_PER_STAGE
+    const startSequence = (currentStage - 1) * WORDS_PER_STAGE + 1
+    const endSequence = currentStage * WORDS_PER_STAGE
 
     console.log(`Calculating word range for level: ${currentLevel}, stage: ${currentStage}`);
-    console.log(`Word range: startIndex=${startIndex}, endIndex=${endIndex}`);
+    console.log(`Sequence range: startSequence=${startSequence}, endSequence=${endSequence}`);
 
-    // ดึงคำศัพท์ทั้งหมดในระดับที่เลือก
     // ตรวจสอบว่ามีการระบุระดับหรือไม่
     if (!currentLevel) {
       console.error(`Missing level parameter. Using default level: a1`);
@@ -88,34 +87,14 @@ export async function GET(request: Request) {
 
     console.log(`Fetching words with strict level filter: ${currentLevel}`);
 
-    const allWordsInLevel = await db.collection("words")
-      .find({ level: currentLevel }) // กรองเฉพาะคำศัพท์ในระดับที่เลือกเท่านั้น
-      .sort({ _id: 1 })
-      .toArray()
-
-    console.log(`Found ${allWordsInLevel.length} total words in level ${currentLevel}`);
-
-    // ตรวจสอบว่ามีคำศัพท์ในระดับที่เลือกหรือไม่
-    if (allWordsInLevel.length === 0) {
-      console.warn(`No words found in level ${currentLevel}. Please check the database.`);
-      return NextResponse.json({
-        words: [],
-        page,
-        totalUncompletedWords: 0,
-        progress,
+    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการโดยใช้ sequence
+    const wordsInStage = await db.collection("words")
+      .find({
         level: currentLevel,
-        stage: currentStage,
-        hasMore: false,
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, max-age=0',
-        }
-      });
-    }
-
-    // กรองเฉพาะคำศัพท์ในด่านที่เลือก
-    const wordsInStage = allWordsInLevel.slice(startIndex, endIndex)
+        sequence: { $gte: startSequence, $lte: endSequence }
+      })
+      .sort({ sequence: 1 })
+      .toArray()
 
     console.log(`Found ${wordsInStage.length} words in stage ${currentStage} of level ${currentLevel}`);
 
@@ -165,9 +144,17 @@ export async function GET(request: Request) {
       const nextStage = currentStage + 1
 
       // ตรวจสอบว่ามีคำศัพท์ในด่านถัดไปหรือไม่
-      const nextStageStartIndex = nextStage * WORDS_PER_STAGE
-      const nextStageEndIndex = (nextStage + 1) * WORDS_PER_STAGE
-      const wordsInNextStage = allWordsInLevel.slice(nextStageStartIndex, nextStageEndIndex)
+      const nextStageStartSequence = (nextStage - 1) * WORDS_PER_STAGE + 1
+      const nextStageEndSequence = nextStage * WORDS_PER_STAGE
+
+      // ดึงคำศัพท์ในด่านถัดไปโดยใช้ sequence
+      const wordsInNextStage = await db.collection("words")
+        .find({
+          level: currentLevel,
+          sequence: { $gte: nextStageStartSequence, $lte: nextStageEndSequence }
+        })
+        .sort({ sequence: 1 })
+        .toArray()
 
       if (wordsInNextStage.length > 0) {
         console.log(`No words in current stage, trying next stage ${nextStage}`)
@@ -201,13 +188,17 @@ export async function GET(request: Request) {
           const nextLevel = levels[levelIndex + 1]
           console.log(`No words in current level, trying next level ${nextLevel}`)
 
-          // ดึงคำศัพท์จากระดับถัดไป (ด่าน 1)
+          // ดึงคำศัพท์จากระดับถัดไป (ด่าน 1) โดยใช้ sequence
+          const nextLevelStartSequence = 1
+          const nextLevelEndSequence = WORDS_PER_STAGE
+
           const nextLevelWords = await db.collection("words")
             .find({
               level: nextLevel,
+              sequence: { $gte: nextLevelStartSequence, $lte: nextLevelEndSequence },
               _id: { $nin: completedWordIds }
             })
-            .sort({ _id: 1 })
+            .sort({ sequence: 1 })
             .limit(limit)
             .toArray()
 

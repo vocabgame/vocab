@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     // ประมวลผลทีละคำ เพื่อตรวจสอบว่ามีคำซ้ำหรือไม่
     for (const word of words) {
-      const { english, thai, level } = word
+      const { english, thai, level, sequence } = word
 
       if (!english || !thai || !level) {
         console.log(`Server API: Skipping invalid word: ${JSON.stringify(word)}`)
@@ -48,6 +48,7 @@ export async function POST(request: Request) {
             $set: {
               thai,
               level,
+              sequence: sequence || existingWord.sequence, // ใช้ลำดับใหม่ถ้ามี หรือใช้ลำดับเดิมถ้าไม่มี
               updatedAt: new Date(),
             },
           },
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
           english,
           thai,
           level,
+          sequence, // เพิ่มลำดับเลขที่
           createdAt: new Date(),
         })
         addedCount++

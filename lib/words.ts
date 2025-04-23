@@ -34,11 +34,11 @@ export async function getWordForUser(userId: string, progress: any) {
     // ลดการ log ที่ไม่จำเป็น
     // console.log(`Fetching words for level ${currentLevel}, stage ${currentStage}`)
 
-    // คำนวณช่วงคำศัพท์ในด่านที่เลือก
-    const startIndex = (currentStage - 1) * WORDS_PER_STAGE
-    const endIndex = currentStage * WORDS_PER_STAGE
+    // คำนวณช่วง sequence ในด่านที่เลือก
+    const startSequence = (currentStage - 1) * WORDS_PER_STAGE + 1
+    const endSequence = currentStage * WORDS_PER_STAGE
 
-    console.log(`Getting words for level: ${currentLevel}, stage: ${currentStage}, startIndex: ${startIndex}, endIndex: ${endIndex}`)
+    console.log(`Getting words for level: ${currentLevel}, stage: ${currentStage}, startSequence: ${startSequence}, endSequence: ${endSequence}`)
 
     // ตรวจสอบว่ามีการระบุระดับหรือไม่
     if (!currentLevel) {
@@ -48,14 +48,14 @@ export async function getWordForUser(userId: string, progress: any) {
 
     console.log(`Fetching words with strict level filter: ${currentLevel}`);
 
-    // ดึงคำศัพท์ทั้งหมดในระดับที่เลือก
-    const allWordsInLevel = await db.collection("words")
-      .find({ level: currentLevel }) // กรองเฉพาะคำศัพท์ในระดับที่เลือกเท่านั้น
-      .sort({ _id: 1 })
+    // ดึงคำศัพท์ทั้งหมดในระดับที่เลือกโดยใช้ sequence
+    const wordsInStage = await db.collection("words")
+      .find({
+        level: currentLevel,
+        sequence: { $gte: startSequence, $lte: endSequence }
+      })
+      .sort({ sequence: 1 })
       .toArray()
-
-    // กรองเฉพาะคำศัพท์ในด่านที่เลือก
-    const wordsInStage = allWordsInLevel.slice(startIndex, endIndex)
 
     console.log(`Found ${wordsInStage.length} words in stage ${currentStage} of level ${currentLevel}`)
 
@@ -314,20 +314,24 @@ export async function getAllWordsInStage(userId: string, level: string, stage: n
     const client = await clientPromise;
     const db = client.db();
 
-    // คำนวณช่วงคำศัพท์ในด่านนี้
-    const startIndex = (stage - 1) * WORDS_PER_STAGE;
+    // คำนวณช่วง sequence ในด่านนี้
+    const startSequence = (stage - 1) * WORDS_PER_STAGE + 1;
+    const endSequence = stage * WORDS_PER_STAGE;
+
+    console.log(`Getting all words for level: ${level}, stage: ${stage}, startSequence: ${startSequence}, endSequence: ${endSequence}`);
 
     // ดึงข้อมูลความคืบหน้าของผู้ใช้
     const progress = await getUserProgress(userId);
     const completedWordIds = progress.completedWords;
 
-    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการ
+    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการโดยใช้ sequence
     const wordsInStage = await db
       .collection("words")
-      .find({ level })
-      .sort({ _id: 1 })
-      .skip(startIndex)
-      .limit(WORDS_PER_STAGE)
+      .find({
+        level,
+        sequence: { $gte: startSequence, $lte: endSequence }
+      })
+      .sort({ sequence: 1 })
       .toArray();
 
     // แยกคำที่เรียนแล้วและยังไม่ได้เรียน
@@ -480,17 +484,20 @@ export async function getWordsForStage(level: string, stage: number, completedWo
       }
     })
 
-    // คำนวณช่วงคำศัพท์ในด่านนี้
-    const startIndex = (stage - 1) * WORDS_PER_STAGE
-    const endIndex = stage * WORDS_PER_STAGE
+    // คำนวณช่วง sequence ในด่านนี้
+    const startSequence = (stage - 1) * WORDS_PER_STAGE + 1
+    const endSequence = stage * WORDS_PER_STAGE
 
-    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการ
+    console.log(`Getting words for level: ${level}, stage: ${stage}, startSequence: ${startSequence}, endSequence: ${endSequence}`)
+
+    // ดึงคำศัพท์ทั้งหมดในระดับและด่านที่ต้องการโดยใช้ sequence
     const wordsInStage = await db
       .collection("words")
-      .find({ level })
-      .sort({ _id: 1 })
-      .skip(startIndex)
-      .limit(WORDS_PER_STAGE)
+      .find({
+        level,
+        sequence: { $gte: startSequence, $lte: endSequence }
+      })
+      .sort({ sequence: 1 })
       .toArray()
 
     // แบ่งคำศัพท์เป็นคำที่เรียนแล้วและยังไม่ได้เรียน
@@ -636,7 +643,10 @@ function calculateStageStats(level: string, totalWordsInLevel: number, progress:
   const stageProgress = progress.stageProgress?.[level] || {}
 
   // คำนวณจำนวนด่านทั้งหมดในระดับนี้
+  // แต่ละด่านมี 100 คำ เรียงตามเลข sequence
   const totalStages = Math.max(1, Math.ceil(totalWordsInLevel / WORDS_PER_STAGE))
+
+  console.log(`Calculating stages for level ${level}: ${totalWordsInLevel} words, ${totalStages} stages`)
 
   for (let stage = 1; stage <= totalStages; stage++) {
     // คำนวณจำนวนคำในด่านนี้

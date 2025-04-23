@@ -46,7 +46,6 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     level: "a1",
   })
   const [bulkData, setBulkData] = useState("")
-  const [bulkLevel, setBulkLevel] = useState("a1")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
@@ -293,10 +292,10 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
   const addBulkWords = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!bulkData || !bulkLevel) {
+    if (!bulkData) {
       toast({
         title: "ข้อมูลไม่ครบถ้วน",
-        description: "กรอกข้อมูลคำศัพท์และระดับ",
+        description: "กรอกข้อมูลคำศัพท์",
         variant: "destructive",
       })
       return
@@ -307,26 +306,60 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
       setIsUploading(true)
       setUploadProgress(0)
 
-      // แยกข้อมูลเป็นคู่คำศัพท์
-      const wordPairs = bulkData
+      // แยกข้อมูลเป็นคำศัพท์
+      const wordEntries = bulkData
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
         .map((line) => {
-          const [english, thai] = line.split(",").map((part) => part.trim())
-          return { english, thai, level: bulkLevel }
-        })
-        .filter((pair) => pair.english && pair.thai)
+          try {
+            // แยกข้อมูลตามช่องว่าง
+            const parts = line.split(/\s+/)
 
-      if (wordPairs.length === 0) {
-        throw new Error("ไม่พบคู่คำศัพท์ โปรดตรวจสอบข้อมูล")
+            // ต้องมีอย่างน้อย 4 ส่วน: ลำดับ, คำศัพท์, คำแปล, ระดับ
+            if (parts.length < 4) return null
+
+            // ส่วนแรกเป็นลำดับ (ใช้ในการบันทึก)
+            const sequence = parseInt(parts[0], 10)
+            if (isNaN(sequence)) {
+              console.warn(`ลำดับไม่ถูกต้อง: ${parts[0]} ในบรรทัด: ${line}`)
+              return null
+            }
+
+            // ส่วนสุดท้ายเป็นระดับ
+            const level = parts[parts.length - 1].toLowerCase()
+
+            // ตรวจสอบว่าระดับถูกต้อง
+            if (!['a1', 'a2', 'b1', 'b2', 'c1', 'c2'].includes(level)) {
+              console.warn(`ระดับไม่ถูกต้อง: ${level} ในบรรทัด: ${line}`)
+              return null
+            }
+
+            // ส่วนที่สองเป็นคำศัพท์ (อาจมีหลายคำ)
+            // หาตำแหน่งของคำแปลโดยนับจากท้าย (ระดับ และ คำแปล)
+            const thaiStartIndex = parts.length - 2
+
+            // คำศัพท์อยู่ระหว่างลำดับและคำแปล
+            const english = parts.slice(1, thaiStartIndex).join(" ")
+            const thai = parts[thaiStartIndex]
+
+            return { english, thai, level, sequence }
+          } catch (error) {
+            console.error(`ข้อผิดพลาดในการแยกข้อมูลบรรทัด: ${line}`, error)
+            return null
+          }
+        })
+        .filter((entry) => entry && entry.english && entry.thai && entry.level)
+
+      if (wordEntries.length === 0) {
+        throw new Error("ไม่พบคำศัพท์ที่ถูกต้อง โปรดตรวจสอบรูปแบบข้อมูล")
       }
 
       // แบ่งคำศัพท์เป็นชุด ชุดละ 20 คำ เพื่อส่งข้อมูล
       const batchSize = 20
       const batches = []
-      for (let i = 0; i < wordPairs.length; i += batchSize) {
-        batches.push(wordPairs.slice(i, i + batchSize))
+      for (let i = 0; i < wordEntries.length; i += batchSize) {
+        batches.push(wordEntries.slice(i, i + batchSize))
       }
 
       let processedCount = 0
@@ -360,12 +393,12 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
         processedCount += batch.length
 
         // ตั้งค่าความคืบหน้า
-        const progress = Math.round((processedCount / wordPairs.length) * 100)
+        const progress = Math.round((processedCount / wordEntries.length) * 100)
         setUploadProgress(progress)
       }
 
       toast({
-        title: "บันทึกคำศัพท์แบบหลายคำสำเร็จ",
+        title: "บันทึกคำศัพท์หลายคำสำเร็จ",
         description: `บันทึกคำศัพท์ ${addedCount} คำ, อัปเดต ${updatedCount} คำ`,
       })
 
@@ -395,10 +428,11 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
 
   // ดาวน์โหลดเทมเพลต
   const downloadTemplate = () => {
-    const template = `book,house,บ้าน
-car,รถยนต์
-water,น้ำ
-food,อาหาร`
+    const template = `1 a an คำนำหน้านามไม่ชี้เฉพาะ a1
+2 about เกี่ยวกับ a1
+3 above ข้างบน a1
+4 across ข้าม a1
+5 action การกระทำ a1`
 
     const blob = new Blob([template], { type: "text/plain;charset=utf-8" })
     const url = URL.createObjectURL(blob)
@@ -469,7 +503,7 @@ food,อาหาร`
             <TabsTrigger value="add" className={isMobile ? 'flex-1' : ''}>
               {formData._id ? "แก้ไขคำศัพท์" : "บันทึกคำศัพท์"}
             </TabsTrigger>
-            <TabsTrigger value="bulk" className={isMobile ? 'flex-1' : ''}>บันทึกหลายคำ</TabsTrigger>
+            <TabsTrigger value="bulk" className={isMobile ? 'flex-1' : ''}>เพิ่มหลายคำ</TabsTrigger>
           </TabsList>
 
           {activeTab === "view" && (
@@ -717,9 +751,9 @@ food,อาหาร`
         <TabsContent value="bulk">
           <Card>
             <CardHeader>
-              <CardTitle>บันทึกคำศัพท์หลายคำ</CardTitle>
+              <CardTitle>เพิ่มคำศัพท์ทีละหลายคำ</CardTitle>
               <CardDescription>
-                บันทึกคำศัพท์หลายคำพร้อมคำแปลภาษาไทย โดยใช้ "คำศัพท์,คำแปลภาษาไทย" แต่ละคู่คำศัพท์ให้อยู่คนละบรรทัด
+                เพิ่มคำศัพท์หลายคำพร้อมกัน โดยกำหนดลำดับเลขที่ คำศัพท์ คำแปล และระดับ ในรูปแบบตาราง
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -736,9 +770,10 @@ food,อาหาร`
                     id="bulkData"
                     value={bulkData}
                     onChange={(e) => setBulkData(e.target.value)}
-                    placeholder="book,house,บ้าน
-car,รถยนต์"
-                    className="min-h-[200px]"
+                    placeholder="1 a an คำนำหน้านามไม่ชี้เฉพาะ a1
+2 about เกี่ยวกับ a1
+3 above ข้างบน a1"
+                    className="min-h-[300px] font-mono"
                     required
                   />
                   {isUploading && (
@@ -750,23 +785,13 @@ car,รถยนต์"
                       <Progress value={uploadProgress} className="h-2" />
                     </div>
                   )}
-                  <p className="text-sm text-muted-foreground">แต่ละบรรทัดควรเป็น "คำศัพท์,คำแปลภาษาไทย"</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bulkLevel">ระดับ CEFR</Label>
-                  <Select value={bulkLevel} onValueChange={setBulkLevel}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="เลือกระดับ CEFR" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="a1">A1</SelectItem>
-                      <SelectItem value="a2">A2</SelectItem>
-                      <SelectItem value="b1">B1</SelectItem>
-                      <SelectItem value="b2">B2</SelectItem>
-                      <SelectItem value="c1">C1</SelectItem>
-                      <SelectItem value="c2">C2</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">รูปแบบการป้อนข้อมูล:</p>
+                    <p className="text-sm text-muted-foreground">- แต่ละบรรทัดคือคำศัพท์หนึ่งคำ</p>
+                    <p className="text-sm text-muted-foreground">- รูปแบบ: <strong>ลำดับ คำศัพท์ คำแปล ระดับ</strong></p>
+                    <p className="text-sm text-muted-foreground">- ตัวอย่าง: "1 a an คำนำหน้านามไม่ชี้เฉพาะ a1"</p>
+                    <p className="text-sm text-muted-foreground">- ระดับที่รองรับ: a1, a2, b1, b2, c1, c2</p>
+                  </div>
                 </div>
                 <CardFooter className="px-0 pt-4">
                   <div className="flex justify-end gap-4">

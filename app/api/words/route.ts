@@ -79,11 +79,37 @@ export async function POST(request: Request) {
     const body = await request.json()
     console.log("Server API: Request body:", body)
 
-    const { english, thai, level } = body
+    const { english, thai, level, sequence } = body
 
     if (!english || !thai || !level) {
       console.log("Server API: Missing required fields")
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // ถ้าไม่มี sequence ให้คำนวณจากระดับ
+    let calculatedSequence = sequence;
+    if (!calculatedSequence) {
+      // คำนวณ sequence ตามระดับ
+      switch(level) {
+        case 'a1': calculatedSequence = 1; break; // เริ่มที่ 1
+        case 'a2': calculatedSequence = 101; break; // เริ่มที่ 101
+        case 'b1': calculatedSequence = 201; break; // เริ่มที่ 201
+        case 'b2': calculatedSequence = 301; break; // เริ่มที่ 301
+        case 'c1': calculatedSequence = 401; break; // เริ่มที่ 401
+        case 'c2': calculatedSequence = 501; break; // เริ่มที่ 501
+        default: calculatedSequence = 1;
+      }
+
+      // หาค่า sequence สูงสุดในระดับนี้
+      const maxSequenceWord = await db.collection("words")
+        .find({ level })
+        .sort({ sequence: -1 })
+        .limit(1)
+        .toArray()
+
+      if (maxSequenceWord.length > 0 && maxSequenceWord[0].sequence) {
+        calculatedSequence = Math.max(calculatedSequence, maxSequenceWord[0].sequence + 1);
+      }
     }
 
     // Check if word already exists
@@ -99,6 +125,7 @@ export async function POST(request: Request) {
           $set: {
             thai,
             level,
+            sequence: calculatedSequence,
             updatedAt: new Date(),
           },
         },
@@ -120,6 +147,7 @@ export async function POST(request: Request) {
       english,
       thai,
       level,
+      sequence: calculatedSequence,
       createdAt: new Date(),
     })
 
