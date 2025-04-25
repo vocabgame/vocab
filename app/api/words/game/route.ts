@@ -125,6 +125,14 @@ export async function GET(request: Request) {
       )
     )
 
+    // เรียงคำศัพท์ตาม sequence อย่างเคร่งครัด
+    uncompletedWordsInStage.sort((a, b) => {
+      if (!a.sequence && !b.sequence) return a._id.toString().localeCompare(b._id.toString());
+      if (!a.sequence) return 1;
+      if (!b.sequence) return -1;
+      return a.sequence - b.sequence;
+    })
+
     console.log(`Found ${uncompletedWordsInStage.length} uncompleted words in stage ${currentStage} of level ${currentLevel}`);
 
     // แสดงข้อมูลคำศัพท์ที่พบ
@@ -136,8 +144,49 @@ export async function GET(request: Request) {
     }
 
     // ดึงคำศัพท์ตามจำนวนที่ต้องการ (pagination)
-    let words = uncompletedWordsInStage
-      .slice((page - 1) * limit, page * limit)
+    // แต่ต้องคำนึงถึง sequence ต่อเนื่อง
+    let words = [];
+
+    // ถ้าเป็นหน้าแรก ให้ดึงคำศัพท์ตาม sequence น้อยที่สุด
+    if (page === 1) {
+      words = uncompletedWordsInStage.slice(0, limit);
+    } else {
+      // ถ้าไม่ใช่หน้าแรก ให้ดึงคำศัพท์ต่อจาก sequence ล่าสุดที่เล่น
+      // โดยหา sequence สูงสุดที่เคยเล่นไปแล้ว
+
+      // ดึงคำศัพท์ที่เล่นไปแล้วในด่านนี้
+      const playedWordsInStage = wordsInStage.filter(word =>
+        completedWordIds.some(id =>
+          id.toString() === word._id.toString() ||
+          id === word._id.toString()
+        )
+      );
+
+      // หา sequence สูงสุดที่เล่นไปแล้ว
+      let maxPlayedSequence = 0;
+      if (playedWordsInStage.length > 0) {
+        playedWordsInStage.forEach(word => {
+          if (word.sequence && word.sequence > maxPlayedSequence) {
+            maxPlayedSequence = word.sequence;
+          }
+        });
+      }
+
+      console.log(`Max played sequence: ${maxPlayedSequence}`);
+
+      // ดึงคำศัพท์ที่มี sequence มากกว่า sequence สูงสุดที่เล่นไปแล้ว
+      const nextWords = uncompletedWordsInStage.filter(word =>
+        word.sequence && word.sequence > maxPlayedSequence
+      );
+
+      // ถ้ามีคำศัพท์ที่มี sequence มากกว่า sequence สูงสุดที่เล่นไปแล้ว
+      if (nextWords.length > 0) {
+        words = nextWords.slice(0, limit);
+      } else {
+        // ถ้าไม่มี ให้ใช้วิธีเดิม
+        words = uncompletedWordsInStage.slice((page - 1) * limit, page * limit);
+      }
+    }
 
     // ถ้าไม่มีคำศัพท์ในด่านปัจจุบัน ให้ลองดูด่านถัดไปในระดับเดียวกัน
     if (words.length === 0 && !requestedStage) {
@@ -167,6 +216,14 @@ export async function GET(request: Request) {
           )
         )
 
+        // เรียงคำศัพท์ตาม sequence อย่างเคร่งครัด
+        uncompletedWordsInNextStage.sort((a, b) => {
+          if (!a.sequence && !b.sequence) return a._id.toString().localeCompare(b._id.toString());
+          if (!a.sequence) return 1;
+          if (!b.sequence) return -1;
+          return a.sequence - b.sequence;
+        })
+
         words = uncompletedWordsInNextStage.slice(0, limit)
 
         // อัพเดตด่านปัจจุบันของผู้ใช้ (เฉพาะเมื่อไม่ได้ระบุด่านเฉพาะเจาะจง)
@@ -192,18 +249,36 @@ export async function GET(request: Request) {
           const nextLevelStartSequence = 1
           const nextLevelEndSequence = WORDS_PER_STAGE
 
+          // ดึงคำศัพท์ทั้งหมดในระดับถัดไป (ด่าน 1)
           const nextLevelWords = await db.collection("words")
             .find({
               level: nextLevel,
-              sequence: { $gte: nextLevelStartSequence, $lte: nextLevelEndSequence },
-              _id: { $nin: completedWordIds }
+              sequence: { $gte: nextLevelStartSequence, $lte: nextLevelEndSequence }
             })
             .sort({ sequence: 1 })
-            .limit(limit)
             .toArray()
 
+          // กรองคำศัพท์ที่ยังไม่ได้เรียนในระดับถัดไป
+          const uncompletedNextLevelWords = nextLevelWords.filter(word =>
+            !completedWordIds.some(id =>
+              id.toString() === word._id.toString() ||
+              id === word._id.toString()
+            )
+          )
+
+          // เรียงคำศัพท์ตาม sequence อย่างเคร่งครัด
+          uncompletedNextLevelWords.sort((a, b) => {
+            if (!a.sequence && !b.sequence) return a._id.toString().localeCompare(b._id.toString());
+            if (!a.sequence) return 1;
+            if (!b.sequence) return -1;
+            return a.sequence - b.sequence;
+          })
+
+          // ดึงคำศัพท์ตามจำนวนที่ต้องการ
+          const nextLevelWordsToUse = uncompletedNextLevelWords.slice(0, limit)
+
           // อัพเดตระดับและด่านปัจจุบันของผู้ใช้
-          if (nextLevelWords.length > 0) {
+          if (uncompletedNextLevelWords.length > 0) {
             await db.collection("progress").updateOne(
               { userId },
               { $set: { currentLevel: nextLevel, currentStage: 1 } }
@@ -213,7 +288,7 @@ export async function GET(request: Request) {
             progress.currentLevel = nextLevel
             progress.currentStage = 1
 
-            words = nextLevelWords
+            words = nextLevelWordsToUse
           }
         }
       }
@@ -221,12 +296,21 @@ export async function GET(request: Request) {
 
     // ถ้ายังไม่มีคำศัพท์ ให้ลองดึงคำศัพท์ที่เคยเรียนไปแล้ว (เพื่อทบทวน)
     if (words.length === 0 && completedWordIds.length > 0) {
-      words = await db.collection("words")
-        .aggregate([
-          { $match: { _id: { $in: completedWordIds.slice(0, 50) } } },
-          { $sample: { size: Math.min(limit, 20) } }
-        ])
+      // ดึงคำศัพท์ที่เคยเรียนไปแล้ว
+      const completedWords = await db.collection("words")
+        .find({ _id: { $in: completedWordIds.slice(0, 50) } })
         .toArray()
+
+      // เรียงคำศัพท์ตาม sequence
+      completedWords.sort((a, b) => {
+        if (!a.sequence && !b.sequence) return a._id.toString().localeCompare(b._id.toString());
+        if (!a.sequence) return 1;
+        if (!b.sequence) return -1;
+        return a.sequence - b.sequence;
+      })
+
+      // ดึงคำศัพท์ตามจำนวนที่ต้องการ
+      words = completedWords.slice(0, Math.min(limit, 20))
     }
 
     // สร้างตัวเลือกสำหรับแต่ละคำ
