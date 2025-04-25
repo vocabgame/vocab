@@ -27,7 +27,7 @@ export function Header({ user }: HeaderProps) {
     { href: "/game", label: "เล่นเกม", icon: null },
     { href: "/review", label: "ทบทวนคำศัพท์", icon: <BookOpen className="h-4 w-4" /> },
     { href: "/level-select", label: "เลือกระดับ", icon: <Layers className="h-4 w-4" /> },
-    { href: "/progress", label: "ความคืบหน้า", icon: <BarChart3 className="h-4 w-4" /> },
+    { href: "/wrong-words", label: "คำที่ตอบผิด", icon: <BarChart3 className="h-4 w-4" /> },
     { href: "/manage-words", label: "จัดการคำศัพท์", icon: <Database className="h-4 w-4" /> },
     // เพิ่มเมนูจัดการผู้ใช้สำหรับแอดมินเท่านั้น
     ...(user?.role === "admin" ? [{ href: "/users", label: "จัดการผู้ใช้", icon: <Users className="h-4 w-4" /> }] : []),

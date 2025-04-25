@@ -8,6 +8,7 @@ interface WrongWord {
     english: string;
     thai: string;
     level: string;
+    sequence?: number;
   };
   wrongCount: number;
   lastWrongAt: Date;
@@ -46,7 +47,8 @@ export async function addWrongWord(userId: string, word: any) {
           word: {
             english: fullWordData.english,
             thai: fullWordData.thai,
-            level: fullWordData.level
+            level: fullWordData.level,
+            sequence: fullWordData.sequence
           }
         }
       }
@@ -59,7 +61,8 @@ export async function addWrongWord(userId: string, word: any) {
       word: {
         english: fullWordData.english,
         thai: fullWordData.thai,
-        level: fullWordData.level
+        level: fullWordData.level,
+        sequence: fullWordData.sequence
       },
       wrongCount: 1,
       lastWrongAt: new Date(),
