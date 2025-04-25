@@ -17,6 +17,8 @@ export async function getUserProgress(userId: string) {
       currentLevel: "a1", // Start with A1
       currentStage: 1, // Start with stage 1
       completedWords: [],
+      wrongWords: [], // เพิ่มฟิลด์เก็บคำที่ตอบผิด
+      playedWords: [], // เพิ่มฟิลด์เก็บคำที่เล่นแล้วทั้งหมด (ทั้งตอบถูกและผิด)
       levelProgress: {
         a1: 0,
         a2: 0,
@@ -102,7 +104,29 @@ export async function updateUserProgress(userId: string, wordId: string, correct
     const wordAlreadyCompleted = userProgress.completedWords.includes(wordId)
     console.log(`Word already completed: ${wordAlreadyCompleted}`)
 
-    // เฉพาะเมื่อตอบถูกหรือเปิดเฉลย จึงจะบันทึกลงฐานข้อมูล
+    // บันทึกคำนี้ลงในรายการคำที่เล่นแล้ว (ไม่ว่าจะตอบถูกหรือผิด)
+    const wordAlreadyPlayed = userProgress.playedWords && userProgress.playedWords.includes(wordId)
+    if (!wordAlreadyPlayed) {
+      await db.collection("progress").updateOne(
+        { userId },
+        { $addToSet: { playedWords: wordId } }
+      )
+      console.log(`Added word ${wordId} to playedWords`)
+    }
+
+    // ถ้าตอบผิด ให้บันทึกลงในรายการคำที่ตอบผิด
+    if (!correct && !revealed) {
+      const wordAlreadyWrong = userProgress.wrongWords && userProgress.wrongWords.includes(wordId)
+      if (!wordAlreadyWrong) {
+        await db.collection("progress").updateOne(
+          { userId },
+          { $addToSet: { wrongWords: wordId } }
+        )
+        console.log(`Added word ${wordId} to wrongWords`)
+      }
+    }
+
+    // เฉพาะเมื่อตอบถูกหรือเปิดเฉลย จึงจะบันทึกลงในรายการคำที่เรียนแล้ว
     if (correct || revealed) {
       // Add word to completed words if not already there
       if (!wordAlreadyCompleted) {
@@ -119,10 +143,19 @@ export async function updateUserProgress(userId: string, wordId: string, correct
         const updateResult = await db.collection("progress").updateOne(
           { userId },
           {
-            $push: { completedWords: wordId },
+            $addToSet: { completedWords: wordId },
             $inc: { ...levelProgressUpdate, ...stageProgressUpdate },
           },
         )
+
+        // ถ้าเคยตอบผิด ให้ลบออกจากรายการคำที่ตอบผิด
+        if (userProgress.wrongWords && userProgress.wrongWords.includes(wordId)) {
+          await db.collection("progress").updateOne(
+            { userId },
+            { $pull: { wrongWords: wordId } }
+          )
+          console.log(`Removed word ${wordId} from wrongWords because it's now correct`)
+        }
 
         console.log(`Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`)
       } else {

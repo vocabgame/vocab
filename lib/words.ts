@@ -58,20 +58,27 @@ export async function getWordForUser(userId: string, progress: any) {
       .toArray()
 
     // ตรวจสอบว่า ผู้ใช้ได้เล่นครบคำในด่านหรือไม่
-    // โดยรวมคำที่ตอบถูก (completedWords) และคำที่ตอบผิด (wrongWords)
-    const allPlayedWords = [...progress.completedWords, ...progress.wrongWords || []];
-    const allWordsPlayed = wordsInStage.every(word => 
-      allPlayedWords.some(id => 
-        id.toString() === word._id.toString() || 
-        id === word._id.toString()
-      )
-    );
+    // โดยใช้ playedWords ที่เก็บคำที่เล่นแล้วทั้งหมด (ทั้งตอบถูกและผิด)
+    const playedWords = progress.playedWords || [];
+    // ถ้าไม่มี playedWords ให้ใช้การรวม completedWords และ wrongWords แทน
+    const allPlayedWords = playedWords.length > 0 ?
+      playedWords :
+      [...progress.completedWords, ...(progress.wrongWords || [])];
+
+    // ตรวจสอบว่าเล่นครบทุกคำในด่านหรือยัง
+    const allWordsPlayed = wordsInStage.every(word => {
+      const wordId = word._id.toString();
+      return allPlayedWords.some(id => {
+        const playedId = typeof id === 'string' ? id : id.toString();
+        return playedId === wordId;
+      });
+    });
 
     // ถ้าเล่นครบคำแล้ว
     if (allWordsPlayed) {
       console.log(`All words in stage ${currentStage} of level ${currentLevel} have been played`);
-      return { 
-        word: null, 
+      return {
+        word: null,
         choices: [],
         stageComplete: true,
         message: "ได้เล่นครบคำในด่านแล้ว ไปเล่นด่านถัดไปทบทวนคำศัพท์"
@@ -80,13 +87,18 @@ export async function getWordForUser(userId: string, progress: any) {
 
     console.log(`Found ${wordsInStage.length} words in stage ${currentStage} of level ${currentLevel}`)
 
-    // กรองคำศัพท์ที่ยังไม่ได้
-    const uncompletedWords = wordsInStage.filter(word =>
-      !completedWordIds.some((id: string | ObjectId) =>
-        id.toString() === word._id.toString() ||
-        id === word._id.toString()
-      )
-    )
+    // ใช้ allPlayedWords ที่ได้จากด้านบนเพื่อกรองคำศัพท์ที่ยังไม่ได้เล่น
+    // แปลง allPlayedWords เป็น ID เพื่อใช้ในการกรอง
+    const allPlayedWordIds = allPlayedWords;
+
+    // กรองคำศัพท์ที่ยังไม่ได้เล่น
+    const uncompletedWords = wordsInStage.filter(word => {
+      const wordId = word._id.toString();
+      return !allPlayedWordIds.some(id => {
+        const playedId = typeof id === 'string' ? id : id.toString();
+        return playedId === wordId;
+      });
+    })
 
     console.log(`Found ${uncompletedWords.length} uncompleted words in stage ${currentStage} of level ${currentLevel}`)
 
@@ -117,13 +129,14 @@ export async function getWordForUser(userId: string, progress: any) {
     if (wordsInNextStage.length > 0) {
       console.log(`Found ${wordsInNextStage.length} words in next stage ${nextStage} of level ${currentLevel}`)
 
-      // กรองคำศัพท์ที่ยังไม่ได้
-      const uncompletedWordsInNextStage = wordsInNextStage.filter(word =>
-        !completedWordIds.some((id: string | ObjectId) =>
-          id.toString() === word._id.toString() ||
-          id === word._id.toString()
-        )
-      )
+      // กรองคำศัพท์ที่ยังไม่ได้เล่น โดยใช้ playedWords
+      const uncompletedWordsInNextStage = wordsInNextStage.filter(word => {
+        const wordId = word._id.toString();
+        return !allPlayedWordIds.some(id => {
+          const playedId = typeof id === 'string' ? id : id.toString();
+          return playedId === wordId;
+        });
+      })
 
       console.log(`Found ${uncompletedWordsInNextStage.length} uncompleted words in next stage ${nextStage} of level ${currentLevel}`)
 
@@ -164,13 +177,14 @@ export async function getWordForUser(userId: string, progress: any) {
       if (wordsInFirstStage.length > 0) {
         console.log(`Found ${wordsInFirstStage.length} words in first stage of level ${nextLevel}`)
 
-        // กรองคำศัพท์ที่ยังไม่ได้
-        const uncompletedWordsInFirstStage = wordsInFirstStage.filter(word =>
-          !completedWordIds.some((id: string | ObjectId) =>
-            id.toString() === word._id.toString() ||
-            id === word._id.toString()
-          )
-        )
+        // กรองคำศัพท์ที่ยังไม่ได้เล่น โดยใช้ playedWords
+        const uncompletedWordsInFirstStage = wordsInFirstStage.filter(word => {
+          const wordId = word._id.toString();
+          return !allPlayedWordIds.some(id => {
+            const playedId = typeof id === 'string' ? id : id.toString();
+            return playedId === wordId;
+          });
+        })
 
         console.log(`Found ${uncompletedWordsInFirstStage.length} uncompleted words in first stage of level ${nextLevel}`)
 
@@ -223,9 +237,18 @@ export async function getWordForUser(userId: string, progress: any) {
 
 async function generateWordWithChoices(words: any[], db: any) {
   try {
-    // Select a random word from the available words
-    const randomIndex = Math.floor(Math.random() * words.length)
-    const selectedWord = words[randomIndex]
+    // เลือกคำศัพท์ที่มี sequence น้อยที่สุด (เรียงตามลำดับ)
+    // เรียงคำศัพท์ตาม sequence ก่อน
+    words.sort((a, b) => {
+      // ถ้าไม่มี sequence ให้ใช้ _id แทน
+      if (!a.sequence && !b.sequence) return a._id.toString().localeCompare(b._id.toString());
+      if (!a.sequence) return 1;
+      if (!b.sequence) return -1;
+      return a.sequence - b.sequence;
+    });
+
+    // เลือกคำแรกหลังจากเรียงแล้ว
+    const selectedWord = words[0]
 
     // ใช้ projection เลือดึงเฉพาะฟิลด์ที่ต้องการ
     const otherChoices = await db
@@ -283,8 +306,14 @@ export async function getNextWord(userId: string, currentWordId: string, selecte
     // ข้อมูลความคืบหน้าของผู้ใช้
     const progress = await getUserProgress(userId)
 
-    // เลือกคำเข้าไปใน completedWords ชั่วคราว เอาไว้แน่ใจว่าจะไม่ได้คำซ้ำ
+    // เลือกคำเข้าไปใน playedWords ชั่วคราว เอาไว้แน่ใจว่าจะไม่ได้คำซ้ำ
+    const tempPlayedWords = [...(progress.playedWords || [])]
     const tempCompletedWords = [...progress.completedWords]
+
+    // ตรวจสอบว่าคำอยู่ใน playedWords หรือไม่
+    if (!tempPlayedWords.includes(currentWordId)) {
+      tempPlayedWords.push(currentWordId)
+    }
 
     // ตรวจสอบว่าคำอยู่ใน completedWords หรือไม่
     if (!tempCompletedWords.includes(currentWordId)) {
@@ -295,6 +324,7 @@ export async function getNextWord(userId: string, currentWordId: string, selecte
     const tempProgress = {
       ...progress,
       completedWords: tempCompletedWords,
+      playedWords: tempPlayedWords,
     }
 
     // เรียกใช้ getWordForUser เลือกคำถัดไป
@@ -413,8 +443,14 @@ export async function getNextWords(userId: string, currentWordId: string, count:
     // ข้อมูลความคืบหน้าของผู้ใช้
     const progress = await getUserProgress(userId)
 
-    // เลือกคำเข้าไปใน completedWords ชั่วคราว
+    // เลือกคำเข้าไปใน playedWords และ completedWords ชั่วคราว
+    const tempPlayedWords = [...(progress.playedWords || [])]
     const tempCompletedWords = [...progress.completedWords]
+
+    if (!tempPlayedWords.includes(currentWordId)) {
+      tempPlayedWords.push(currentWordId)
+    }
+
     if (!tempCompletedWords.includes(currentWordId)) {
       tempCompletedWords.push(currentWordId)
     }
@@ -423,12 +459,14 @@ export async function getNextWords(userId: string, currentWordId: string, count:
     const tempProgress = {
       ...progress,
       completedWords: tempCompletedWords,
+      playedWords: tempPlayedWords,
     }
 
     // คำศัพท์หลายคำพร้อม
     const words = [];
     let currentTempProgress = { ...tempProgress };
     let currentTempCompletedWords = [...tempCompletedWords];
+    let currentTempPlayedWords = [...tempPlayedWords];
 
     // คำศัพท์ละคำตามจำนวนที่ต้องการ
     for (let i = 0; i < count; i++) {
@@ -452,9 +490,16 @@ export async function getNextWords(userId: string, currentWordId: string, count:
       // เลือกคำศัพท์ที่ได้เข้าไปใน array
       words.push(wordResult);
 
-      // เลือกคำศัพท์ที่ได้เข้าไปใน completedWords ชั่วคราว
+      // เลือกคำศัพท์ที่ได้เข้าไปใน completedWords และ playedWords ชั่วคราว
       if (wordResult.word && wordResult.word._id) {
         const wordId = wordResult.word._id.toString();
+
+        // เพิ่มเข้าไปใน playedWords เสมอ
+        if (!currentTempPlayedWords.includes(wordId)) {
+          currentTempPlayedWords.push(wordId);
+        }
+
+        // เพิ่มเข้าไปใน completedWords ถ้ายังไม่มี
         if (!currentTempCompletedWords.includes(wordId)) {
           currentTempCompletedWords.push(wordId);
         }
@@ -464,6 +509,7 @@ export async function getNextWords(userId: string, currentWordId: string, count:
       currentTempProgress = {
         ...currentTempProgress,
         completedWords: currentTempCompletedWords,
+        playedWords: currentTempPlayedWords,
       };
     }
 

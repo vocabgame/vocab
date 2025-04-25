@@ -941,6 +941,13 @@ export function GameInterface({ initialWord, initialChoices, userId, progress, s
       duration: 800,
     })
 
+    // บันทึกคำนี้ลงในฐานข้อมูลคำที่ตอบผิดด้วย
+    try {
+      await addWrongWord(userId, word)
+    } catch (error) {
+      console.error("Error saving revealed word to wrong words:", error)
+    }
+
     // ว่าได้เห็นคำแล้ว แต่ไม่นับว่าตอบถูก
     try {
       console.log(`Updating progress for revealed word: ${word.english}, id: ${word._id}`)
