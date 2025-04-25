@@ -187,36 +187,7 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
     }
   }
 
-  // บันทึกคำศัพท์อย่าง
-  const addSampleWords = async () => {
-    try {
-      setIsLoading(true)
-      const response = await fetch("/api/words/add-sample")
-
-      if (!response.ok) {
-        throw new Error("Failed to add sample words")
-      }
-
-      const data = await response.json()
-
-      toast({
-        title: "บันทึกคำศัพท์อย่างสำเร็จ",
-        description: data.message,
-      })
-
-      // โหลดคำศัพท์ใหม่
-      loadWords()
-    } catch (error) {
-      console.error("Error adding sample words:", error)
-      toast({
-        title: "ข้อผิดพลาด",
-        description: "ไม่สามารถบันทึกคำศัพท์อย่างได้",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  
 
   // ล้างคำศัพท์ส้งหมด
   const clearAllWords = async () => {
@@ -463,23 +434,20 @@ export function WordManager({ wordCount, recentWords }: WordManagerProps) {
               <div className="mt-1 text-2xl font-bold">{words.length}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-sm font-medium text-muted-foreground">การ</div>
+              <div className="text-sm font-medium text-muted-foreground">การจัดการคำศัพท์</div>
               <div className="mt-1 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={addSampleWords} disabled={isLoading}>
-                  เพิ่มคำศัพท์ตัวอย่าง
-                </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="outline" size="sm" className="text-destructive">
                       <AlertTriangle className="mr-2 h-4 w-4" />
-                      ตั้งค่าความคืบหน้า
+                      ล้างค่าความคืบหน้าทั้งหมด
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>แน่ใจไม่?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        การตั้งค่าความคืบหน้าจะลบการเรียนคำศัพท์ทั้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
+                        การล้างค่าความคืบหน้าจะลบการเรียนคำศัพท์ทั้งหมด และเริ่มต้นใหม่ ที่ระดับ A1
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
